@@ -218,10 +218,14 @@
           </div>
 
           <!-- Extra Metrics -->
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center text-xs">
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center text-xs">
             <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
               <span class="text-slate-500 block">ผิวเปลือกคาดการณ์</span>
               <span id="kpiSheath" class="text-base font-mono font-bold text-slate-900 mt-0.5 block">~55.3 °C</span>
+            </div>
+            <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+              <span class="text-slate-500 block">ข้อต่อ Joint (T4 / T5)</span>
+              <span id="kpiJoint" class="text-base font-mono font-bold text-purple-700 mt-0.5 block">~50.7 / 44.0 °C</span>
             </div>
             <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
               <span class="text-slate-500 block">กำลังไฟฟ้าลูป 14m</span>
@@ -319,10 +323,12 @@
         <div class="flex flex-wrap items-center gap-3 text-[11px] sm:text-xs">
           <span><span class="inline-block w-2.5 h-1 bg-red-600 rounded-full mr-1"></span>เป้าหมาย 95-100 °C</span>
           <span><span class="inline-block w-2.5 h-1 bg-blue-600 rounded-full mr-1"></span>กระแส (แกนขวา A)</span>
-          <span><span class="inline-block w-2.5 h-1 bg-amber-600 rounded-full mr-1"></span>เปลือกนอก TC Sheath</span>
+          <span><span class="inline-block w-2.5 h-1 bg-amber-600 rounded-full mr-1"></span>เปลือกนอก Sheath</span>
+          <span><span class="inline-block w-2.5 h-1 bg-purple-600 rounded-full mr-1"></span>ข้อต่อ T4 (Joint 1)</span>
+          <span><span class="inline-block w-2.5 h-1 bg-cyan-600 rounded-full mr-1"></span>ข้อต่อ T5 (Joint 2)</span>
         </div>
         <button onclick="toggleTable()" class="font-semibold text-slate-800 hover:text-blue-600 transition">
-          <span id="toggleBtnText">ดูข้อมูลดิบ 25 จุด [แสดง]</span>
+          <span id="toggleBtnText">ดูข้อมูลจริง 23 จุดบันทึก [แสดง]</span>
         </button>
       </div>
 
@@ -333,14 +339,12 @@
             <thead class="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
               <tr>
                 <th class="px-2.5 py-1.5">เวลา (ชม.)</th>
-                <th class="px-2.5 py-1.5">นับถอยหลัง</th>
                 <th class="px-2.5 py-1.5">สถานะ</th>
-                <th class="px-2.5 py-1.5 text-right">ตัวนำ (°C)</th>
-                <th class="px-2.5 py-1.5 text-right">TC1</th>
-                <th class="px-2.5 py-1.5 text-right">TC2</th>
-                <th class="px-2.5 py-1.5 text-right">TC3</th>
-                <th class="px-2.5 py-1.5 text-right">เปลือก (°C)</th>
-                <th class="px-2.5 py-1.5 text-right">Tamb (°C)</th>
+                <th class="px-2.5 py-1.5 text-right text-red-600 font-bold">ตัวนำ (°C)</th>
+                <th class="px-2.5 py-1.5 text-right text-purple-700 font-bold">T4 ข้อต่อ</th>
+                <th class="px-2.5 py-1.5 text-right text-cyan-700 font-bold">T5 ข้อต่อ</th>
+                <th class="px-2.5 py-1.5 text-right text-amber-700">เปลือก (°C)</th>
+                <th class="px-2.5 py-1.5 text-right text-slate-700">Tamb (°C)</th>
                 <th class="px-2.5 py-1.5 text-right text-blue-700 font-bold">กระแส (A)</th>
               </tr>
             </thead>
@@ -387,31 +391,606 @@
 
   <!-- Logic -->
   <script>
-    const rawCycle3Data = [
-  {"time_hrs": 0.03, "rem_time": "07:57:58", "status": "Heating", "tavg": 30.9, "tc1": 30.8, "tc2": 31.0, "tc3": 30.8, "sheath_top": 28.8, "sheath_bot": 29.3, "tamb": 29.4, "i_heat_a": 1861.0},
-  {"time_hrs": 1.0, "rem_time": "07:00:00", "status": "Heating", "tavg": 55.1, "tc1": 55.0, "tc2": 55.8, "tc3": 54.4, "sheath_top": 35.8, "sheath_bot": 36.1, "tamb": 30.5, "i_heat_a": 1866.0},
-  {"time_hrs": 2.0, "rem_time": "05:59:53", "status": "Heating", "tavg": 71.9, "tc1": 71.8, "tc2": 72.5, "tc3": 71.4, "sheath_top": 43.2, "sheath_bot": 44.1, "tamb": 31.4, "i_heat_a": 1858.0},
-  {"time_hrs": 3.0, "rem_time": "04:59:55", "status": "Heating", "tavg": 83.3, "tc1": 83.1, "tc2": 83.9, "tc3": 83.0, "sheath_top": 48.5, "sheath_bot": 49.9, "tamb": 32.4, "i_heat_a": 1856.0},
-  {"time_hrs": 4.01, "rem_time": "03:59:16", "status": "Heating", "tavg": 91.3, "tc1": 89.8, "tc2": 91.8, "tc3": 89.5, "sheath_top": 53.7, "sheath_bot": 53.7, "tamb": 32.7, "i_heat_a": 1840.0},
-  {"time_hrs": 5.06, "rem_time": "02:56:31", "status": "Heating", "tavg": 96.9, "tc1": 96.4, "tc2": 98.3, "tc3": 96.0, "sheath_top": 53.8, "sheath_bot": 55.2, "tamb": 33.0, "i_heat_a": 1753.0},
-  {"time_hrs": 6.02, "rem_time": "01:58:58", "status": "Heating", "tavg": 97.1, "tc1": 96.5, "tc2": 98.6, "tc3": 95.9, "sheath_top": 54.3, "sheath_bot": 56.3, "tamb": 33.3, "i_heat_a": 1706.0},
-  {"time_hrs": 7.0, "rem_time": "00:59:59", "status": "Heating", "tavg": 97.0, "tc1": 96.4, "tc2": 98.8, "tc3": 95.8, "sheath_top": 54.5, "sheath_bot": 56.2, "tamb": 33.1, "i_heat_a": 1700.0},
-  {"time_hrs": 8.0, "rem_time": "00:00:01", "status": "Heating", "tavg": 96.8, "tc1": 96.2, "tc2": 96.7, "tc3": 97.5, "sheath_top": 54.2, "sheath_bot": 55.6, "tamb": 32.4, "i_heat_a": 1714.0},
-  {"time_hrs": 8.0, "rem_time": "16:00:00", "status": "Heating", "tavg": 96.8, "tc1": 96.2, "tc2": 96.7, "tc3": 94.0, "sheath_top": 54.2, "sheath_bot": 55.6, "tamb": 32.4, "i_heat_a": 1708.0},
-  {"time_hrs": 9.0, "rem_time": "14:59:55", "status": "Cooling", "tavg": 74.9, "tc1": 74.3, "tc2": 74.0, "tc3": 76.3, "sheath_top": 47.6, "sheath_bot": 51.2, "tamb": 31.5, "i_heat_a": 6.0},
-  {"time_hrs": 10.11, "rem_time": "13:53:24", "status": "Cooling", "tavg": 59.1, "tc1": 58.9, "tc2": 58.2, "tc3": 60.2, "sheath_top": 40.4, "sheath_bot": 43.0, "tamb": 30.7, "i_heat_a": 6.0},
-  {"time_hrs": 10.86, "rem_time": "13:08:31", "status": "Cooling", "tavg": 51.7, "tc1": 51.6, "tc2": 50.9, "tc3": 52.6, "sheath_top": 37.0, "sheath_bot": 40.3, "tamb": 30.4, "i_heat_a": 7.0},
-  {"time_hrs": 12.0, "rem_time": "12:00:12", "status": "Cooling", "tavg": 43.8, "tc1": 43.8, "tc2": 43.1, "tc3": 44.5, "sheath_top": 34.2, "sheath_bot": 36.6, "tamb": 30.0, "i_heat_a": 6.0},
-  {"time_hrs": 13.98, "rem_time": "10:00:55", "status": "Cooling", "tavg": 36.3, "tc1": 36.4, "tc2": 35.9, "tc3": 36.7, "sheath_top": 31.3, "sheath_bot": 32.7, "tamb": 29.6, "i_heat_a": 6.0},
-  {"time_hrs": 14.99, "rem_time": "09:00:40", "status": "Cooling", "tavg": 34.3, "tc1": 34.3, "tc2": 33.9, "tc3": 34.6, "sheath_top": 30.4, "sheath_bot": 31.4, "tamb": 28.9, "i_heat_a": 6.0},
-  {"time_hrs": 15.99, "rem_time": "08:00:40", "status": "Cooling", "tavg": 32.7, "tc1": 32.7, "tc2": 32.4, "tc3": 33.0, "sheath_top": 29.6, "sheath_bot": 30.3, "tamb": 28.5, "i_heat_a": 6.0},
-  {"time_hrs": 17.0, "rem_time": "07:00:00", "status": "Cooling", "tavg": 31.6, "tc1": 31.6, "tc2": 31.4, "tc3": 31.9, "sheath_top": 29.1, "sheath_bot": 29.0, "tamb": 28.3, "i_heat_a": 7.0},
-  {"time_hrs": 18.0, "rem_time": "06:00:00", "status": "Cooling", "tavg": 30.9, "tc1": 30.8, "tc2": 30.8, "tc3": 31.2, "sheath_top": 28.7, "sheath_bot": 29.3, "tamb": 28.3, "i_heat_a": 6.0},
-  {"time_hrs": 18.99, "rem_time": "05:00:29", "status": "Cooling", "tavg": 30.4, "tc1": 30.3, "tc2": 30.2, "tc3": 30.6, "sheath_top": 28.5, "sheath_bot": 29.1, "tamb": 28.2, "i_heat_a": 6.0},
-  {"time_hrs": 20.0, "rem_time": "04:00:00", "status": "Cooling", "tavg": 30.0, "tc1": 30.0, "tc2": 29.8, "tc3": 30.2, "sheath_top": 28.2, "sheath_bot": 28.8, "tamb": 28.2, "i_heat_a": 6.0},
-  {"time_hrs": 21.0, "rem_time": "03:00:00", "status": "Cooling", "tavg": 29.8, "tc1": 29.0, "tc2": 30.4, "tc3": 30.0, "sheath_top": 28.1, "sheath_bot": 28.7, "tamb": 28.1, "i_heat_a": 6.0},
-  {"time_hrs": 22.0, "rem_time": "02:00:00", "status": "Cooling", "tavg": 29.7, "tc1": 29.2, "tc2": 30.0, "tc3": 29.2, "sheath_top": 28.0, "sheath_bot": 28.6, "tamb": 28.0, "i_heat_a": 7.0},
-  {"time_hrs": 22.99, "rem_time": "01:00:44", "status": "Cooling", "tavg": 29.5, "tc1": 29.4, "tc2": 29.5, "tc3": 29.6, "sheath_top": 28.0, "sheath_bot": 28.5, "tamb": 28.2, "i_heat_a": 7.0}
+    ﻿const rawCycle3Data = [
+
+  {
+
+    "time_hrs": 0.0,
+
+    "status": "Heating",
+
+    "tavg": 30.2,
+
+    "tc1": 30.1,
+
+    "tc2": 30.2,
+
+    "tc3": 30.2,
+
+    "t4_joint": 29.4,
+
+    "t5_joint": 29.3,
+
+    "sheath": 28.8,
+
+    "tamb": 29.3,
+
+    "i_heat_a": 1484
+
+  },
+
+  {
+
+    "time_hrs": 0.5,
+
+    "status": "Heating",
+
+    "tavg": 43.7,
+
+    "tc1": 43.6,
+
+    "tc2": 44.4,
+
+    "tc3": 43.2,
+
+    "t4_joint": 43.8,
+
+    "t5_joint": 38.2,
+
+    "sheath": 31.1,
+
+    "tamb": 29.8,
+
+    "i_heat_a": 1834
+
+  },
+
+  {
+
+    "time_hrs": 1.0,
+
+    "status": "Heating",
+
+    "tavg": 54.9,
+
+    "tc1": 54.8,
+
+    "tc2": 55.7,
+
+    "tc3": 54.3,
+
+    "t4_joint": 47.0,
+
+    "t5_joint": 40.6,
+
+    "sheath": 35.8,
+
+    "tamb": 30.5,
+
+    "i_heat_a": 1834
+
+  },
+
+  {
+
+    "time_hrs": 2.0,
+
+    "status": "Heating",
+
+    "tavg": 71.7,
+
+    "tc1": 71.6,
+
+    "tc2": 72.4,
+
+    "tc3": 71.2,
+
+    "t4_joint": 50.1,
+
+    "t5_joint": 43.2,
+
+    "sheath": 43.6,
+
+    "tamb": 31.6,
+
+    "i_heat_a": 1823
+
+  },
+
+  {
+
+    "time_hrs": 3.0,
+
+    "status": "Heating",
+
+    "tavg": 83.2,
+
+    "tc1": 83.0,
+
+    "tc2": 83.8,
+
+    "tc3": 82.9,
+
+    "t4_joint": 52.1,
+
+    "t5_joint": 44.5,
+
+    "sheath": 48.5,
+
+    "tamb": 32.4,
+
+    "i_heat_a": 1822
+
+  },
+
+  {
+
+    "time_hrs": 4.0,
+
+    "status": "Heating",
+
+    "tavg": 91.2,
+
+    "tc1": 90.8,
+
+    "tc2": 91.7,
+
+    "tc3": 91.0,
+
+    "t4_joint": 53.0,
+
+    "t5_joint": 45.5,
+
+    "sheath": 51.8,
+
+    "tamb": 33.3,
+
+    "i_heat_a": 1809
+
+  },
+
+  {
+
+    "time_hrs": 4.5,
+
+    "status": "Heating",
+
+    "tavg": 94.0,
+
+    "tc1": 93.6,
+
+    "tc2": 94.6,
+
+    "tc3": 93.9,
+
+    "t4_joint": 53.2,
+
+    "t5_joint": 45.6,
+
+    "sheath": 52.7,
+
+    "tamb": 33.1,
+
+    "i_heat_a": 1810
+
+  },
+
+  {
+
+    "time_hrs": 5.0,
+
+    "status": "Heating",
+
+    "tavg": 96.6,
+
+    "tc1": 96.1,
+
+    "tc2": 97.1,
+
+    "tc3": 96.5,
+
+    "t4_joint": 53.2,
+
+    "t5_joint": 45.8,
+
+    "sheath": 53.6,
+
+    "tamb": 33.1,
+
+    "i_heat_a": 1837
+
+  },
+
+  {
+
+    "time_hrs": 5.5,
+
+    "status": "Heating",
+
+    "tavg": 97.1,
+
+    "tc1": 96.6,
+
+    "tc2": 97.4,
+
+    "tc3": 97.3,
+
+    "t4_joint": 51.3,
+
+    "t5_joint": 44.8,
+
+    "sheath": 54.3,
+
+    "tamb": 33.1,
+
+    "i_heat_a": 1691
+
+  },
+
+  {
+
+    "time_hrs": 6.0,
+
+    "status": "Heating",
+
+    "tavg": 97.1,
+
+    "tc1": 96.5,
+
+    "tc2": 97.3,
+
+    "tc3": 97.4,
+
+    "t4_joint": 51.0,
+
+    "t5_joint": 44.4,
+
+    "sheath": 54.4,
+
+    "tamb": 33.3,
+
+    "i_heat_a": 1685
+
+  },
+
+  {
+
+    "time_hrs": 7.0,
+
+    "status": "Heating",
+
+    "tavg": 97.0,
+
+    "tc1": 96.4,
+
+    "tc2": 97.1,
+
+    "tc3": 97.5,
+
+    "t4_joint": 50.6,
+
+    "t5_joint": 44.3,
+
+    "sheath": 54.4,
+
+    "tamb": 33.2,
+
+    "i_heat_a": 1687
+
+  },
+
+  {
+
+    "time_hrs": 8.0,
+
+    "status": "Heating",
+
+    "tavg": 96.8,
+
+    "tc1": 96.2,
+
+    "tc2": 96.7,
+
+    "tc3": 97.4,
+
+    "t4_joint": 50.1,
+
+    "t5_joint": 44.0,
+
+    "sheath": 54.5,
+
+    "tamb": 32.4,
+
+    "i_heat_a": 1700
+
+  },
+
+  {
+
+    "time_hrs": 8.5,
+
+    "status": "Cooling",
+
+    "tavg": 85.5,
+
+    "tc1": 84.9,
+
+    "tc2": 84.7,
+
+    "tc3": 87.0,
+
+    "t4_joint": 37.3,
+
+    "t5_joint": 35.9,
+
+    "sheath": 52.5,
+
+    "tamb": 32.0,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 9.0,
+
+    "status": "Cooling",
+
+    "tavg": 75.4,
+
+    "tc1": 74.9,
+
+    "tc2": 74.5,
+
+    "tc3": 76.9,
+
+    "t4_joint": 34.6,
+
+    "t5_joint": 34.0,
+
+    "sheath": 47.9,
+
+    "tamb": 31.5,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 10.0,
+
+    "status": "Cooling",
+
+    "tavg": 60.8,
+
+    "tc1": 60.5,
+
+    "tc2": 59.9,
+
+    "tc3": 61.9,
+
+    "t4_joint": 32.3,
+
+    "t5_joint": 32.0,
+
+    "sheath": 41.3,
+
+    "tamb": 30.8,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 11.0,
+
+    "status": "Cooling",
+
+    "tavg": 50.8,
+
+    "tc1": 50.7,
+
+    "tc2": 50.0,
+
+    "tc3": 51.7,
+
+    "t4_joint": 31.2,
+
+    "t5_joint": 31.1,
+
+    "sheath": 37.1,
+
+    "tamb": 30.4,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 12.0,
+
+    "status": "Cooling",
+
+    "tavg": 43.9,
+
+    "tc1": 44.0,
+
+    "tc2": 43.2,
+
+    "tc3": 44.6,
+
+    "t4_joint": 30.5,
+
+    "t5_joint": 30.5,
+
+    "sheath": 34.3,
+
+    "tamb": 30.0,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 14.0,
+
+    "status": "Cooling",
+
+    "tavg": 36.4,
+
+    "tc1": 36.4,
+
+    "tc2": 35.9,
+
+    "tc3": 36.8,
+
+    "t4_joint": 29.8,
+
+    "t5_joint": 29.8,
+
+    "sheath": 31.3,
+
+    "tamb": 29.6,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 16.0,
+
+    "status": "Cooling",
+
+    "tavg": 32.7,
+
+    "tc1": 32.7,
+
+    "tc2": 32.5,
+
+    "tc3": 33.0,
+
+    "t4_joint": 28.6,
+
+    "t5_joint": 28.8,
+
+    "sheath": 29.6,
+
+    "tamb": 28.4,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 18.0,
+
+    "status": "Cooling",
+
+    "tavg": 30.9,
+
+    "tc1": 30.8,
+
+    "tc2": 30.7,
+
+    "tc3": 31.2,
+
+    "t4_joint": 28.4,
+
+    "t5_joint": 28.5,
+
+    "sheath": 28.7,
+
+    "tamb": 28.3,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 20.0,
+
+    "status": "Cooling",
+
+    "tavg": 30.0,
+
+    "tc1": 30.0,
+
+    "tc2": 29.9,
+
+    "tc3": 30.2,
+
+    "t4_joint": 28.3,
+
+    "t5_joint": 28.4,
+
+    "sheath": 28.3,
+
+    "tamb": 28.2,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 22.0,
+
+    "status": "Cooling",
+
+    "tavg": 29.7,
+
+    "tc1": 29.6,
+
+    "tc2": 29.6,
+
+    "tc3": 29.8,
+
+    "t4_joint": 28.2,
+
+    "t5_joint": 28.3,
+
+    "sheath": 28.0,
+
+    "tamb": 28.1,
+
+    "i_heat_a": 0
+
+  },
+
+  {
+
+    "time_hrs": 24.0,
+
+    "status": "Cooling",
+
+    "tavg": 29.4,
+
+    "tc1": 29.4,
+
+    "tc2": 29.5,
+
+    "tc3": 29.5,
+
+    "t4_joint": 28.5,
+
+    "t5_joint": 28.6,
+
+    "sheath": 28.1,
+
+    "tamb": 28.6,
+
+    "i_heat_a": 0
+
+  }
+
 ];
 
     let chartMode = 'both';
@@ -434,6 +1013,7 @@
     const cardHoldTargetLabel = document.getElementById('cardHoldTargetLabel');
 
     const kpiSheath = document.getElementById('kpiSheath');
+    const kpiJoint = document.getElementById('kpiJoint');
     const kpiPower = document.getElementById('kpiPower');
     const kpiVoltage = document.getElementById('kpiVoltage');
     const kpiCool = document.getElementById('kpiCool');
@@ -506,6 +1086,11 @@
       cardHoldTargetLabel.textContent = target.toFixed(1) + ' °C';
 
       kpiSheath.textContent = '~' + res.sheathEst.toFixed(1) + ' °C';
+      const j4Est = tamb + 0.282 * (target - tamb);
+      const j5Est = tamb + 0.178 * (target - tamb);
+      if (kpiJoint) {
+        kpiJoint.textContent = `~${j4Est.toFixed(1)} / ${j5Est.toFixed(1)} °C`;
+      }
       kpiPower.textContent = res.totalLoopPkW.toFixed(2) + ' kW';
       kpiVoltage.textContent = '~' + res.vInject.toFixed(1) + ' V';
       kpiCool.textContent = '≤ ' + res.cooled16h.toFixed(1) + ' °C';
@@ -663,7 +1248,9 @@
 
       if (chartMode === 'actual' || chartMode === 'both') {
         const actualCond = rawCycle3Data.map(d => ({ x: d.time_hrs, y: d.tavg }));
-        const actualSheath = rawCycle3Data.map(d => ({ x: d.time_hrs, y: d.sheath_top }));
+        const actualT4 = rawCycle3Data.map(d => ({ x: d.time_hrs, y: d.t4_joint }));
+        const actualT5 = rawCycle3Data.map(d => ({ x: d.time_hrs, y: d.t5_joint }));
+        const actualSheath = rawCycle3Data.map(d => ({ x: d.time_hrs, y: d.sheath }));
         const actualCurrent = rawCycle3Data.map(d => ({ x: d.time_hrs, y: d.i_heat_a }));
 
         datasets.push({
@@ -679,7 +1266,29 @@
         });
 
         datasets.push({
-          label: 'เปลือกจริง (Actual Sheath)',
+          label: 'ข้อต่อ T4 (Joint 1)',
+          data: actualT4,
+          borderColor: '#8b5cf6',
+          borderWidth: 1.5,
+          pointRadius: 2,
+          pointBackgroundColor: '#8b5cf6',
+          tension: 0.2,
+          yAxisID: 'y'
+        });
+
+        datasets.push({
+          label: 'ข้อต่อ T5 (Joint 2)',
+          data: actualT5,
+          borderColor: '#06b6d4',
+          borderWidth: 1.5,
+          pointRadius: 2,
+          pointBackgroundColor: '#06b6d4',
+          tension: 0.2,
+          yAxisID: 'y'
+        });
+
+        datasets.push({
+          label: 'เปลือกสายเคเบิล (Sheath)',
           data: actualSheath,
           borderColor: '#d97706',
           borderWidth: 1.5,
@@ -739,14 +1348,12 @@
         const tr = document.createElement('tr');
         tr.className = (i % 2 === 0) ? 'bg-slate-50/50' : 'bg-white';
         tr.innerHTML = `
-          <td class="px-2.5 py-1 font-bold text-slate-900">${row.time_hrs.toFixed(2)}h</td>
-          <td class="px-2.5 py-1 text-slate-500">${row.rem_time}</td>
+          <td class="px-2.5 py-1 font-bold text-slate-900">${row.time_hrs.toFixed(1)}h</td>
           <td class="px-2.5 py-1"><span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${row.status === 'Heating' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}">${row.status}</span></td>
           <td class="px-2.5 py-1 text-right font-bold text-red-600">${row.tavg.toFixed(1)}</td>
-          <td class="px-2.5 py-1 text-right text-slate-500">${row.tc1.toFixed(1)}</td>
-          <td class="px-2.5 py-1 text-right text-slate-500">${row.tc2.toFixed(1)}</td>
-          <td class="px-2.5 py-1 text-right text-slate-500">${row.tc3.toFixed(1)}</td>
-          <td class="px-2.5 py-1 text-right text-amber-700">${row.sheath_top.toFixed(1)}</td>
+          <td class="px-2.5 py-1 text-right font-bold text-purple-700">${row.t4_joint.toFixed(1)}</td>
+          <td class="px-2.5 py-1 text-right font-bold text-cyan-700">${row.t5_joint.toFixed(1)}</td>
+          <td class="px-2.5 py-1 text-right text-amber-700">${row.sheath.toFixed(1)}</td>
           <td class="px-2.5 py-1 text-right text-slate-700">${row.tamb.toFixed(1)}</td>
           <td class="px-2.5 py-1 text-right font-bold text-blue-600">${row.i_heat_a.toFixed(0)}</td>
         `;

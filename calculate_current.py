@@ -52,6 +52,10 @@ def predict_heating_profile(tamb_c, target_temp_c=97.5, ramp_target_hours=5.0):
     
     # Expected Sheath Surface Temperature in Steady State
     tc_sheath_expected = tamb_c + (target_temp_c - tamb_c) / (1.0 + 1.81)
+
+    # Expected Joint Surface Temperatures in Steady State (Calibrated from Test_Record T4 & T5)
+    t4_joint_expected = tamb_c + 0.282 * (target_temp_c - tamb_c)
+    t5_joint_expected = tamb_c + 0.178 * (target_temp_c - tamb_c)
     
     # Cooling prediction at 16 hours
     t_cool_16h = (tamb_c - 2.0) + (target_temp_c - (tamb_c - 2.0)) * math.exp(-16.0 / TAU_COOL)
@@ -71,6 +75,8 @@ def predict_heating_profile(tamb_c, target_temp_c=97.5, ramp_target_hours=5.0):
         "Phase2_Hold_Current_kA": round(i_hold_a / 1000.0, 3),
         "Phase2_Recommended_Set_kA": round(i_hold_set, 2),
         "Expected_Sheath_Temp_C": round(tc_sheath_expected, 1),
+        "Expected_Joint_T4_C": round(t4_joint_expected, 1),
+        "Expected_Joint_T5_C": round(t5_joint_expected, 1),
         "Expected_Cooled_Temp_16h_C": round(t_cool_16h, 1),
         "Cooling_Standard_Pass": t_cool_16h <= 30.0 or t_cool_16h <= (tamb_c + 10.0)
     }
@@ -107,6 +113,7 @@ def main():
     print(f"  --> Calculated Hold Current   : {res['Phase2_Hold_Current_A']:.0f} A ({res['Phase2_Hold_Current_kA']:.3f} kA)")
     print(f"  --> Recommended Panel Setting : {res['Phase2_Recommended_Set_kA']:.2f} kA")
     print(f"  --> Expected Sheath Temp      : ~{res['Expected_Sheath_Temp_C']} deg C")
+    print(f"  --> Expected Joint Temp (T4/T5): ~{res['Expected_Joint_T4_C']} / {res['Expected_Joint_T5_C']} deg C")
     print("-" * 65)
     print(" [PHASE 3: NATURAL COOLING (8.0h to 24.0h = 16 hours)]")
     print(f"  --> Stop current (0 A) -> Expected temp at 16h: {res['Expected_Cooled_Temp_16h_C']} deg C")
@@ -116,6 +123,7 @@ def main():
     print("  - Cycle 1 (Tamb 28.5 C): Boost Set 1.90 kA -> 93.9 C (4h), Hold Set 1.70 kA -> 96.5 C")
     print("  - Cycle 2 (Tamb 32.0 C): Boost Set 1.85 kA -> 91.2 C (4h), Hold Set 1.70 kA -> 97.0 C")
     print("  - Cycle 3 (Tamb 32.5 C): Boost Set 1.85 kA -> 91.3 C (4h), Hold Set 1.70 kA -> 97.0 C")
+    print("  - Joint Temp (T4 / T5) : T4 peak ~53 C (hold ~51 C), T5 peak ~46 C (hold ~44 C)")
     print("="*65 + "\n")
 
 if __name__ == "__main__":

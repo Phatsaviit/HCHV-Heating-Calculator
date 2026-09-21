@@ -183,14 +183,14 @@
                 <span class="font-mono text-slate-500">0 - 5 ชม.</span>
               </div>
               <div class="flex items-baseline gap-1.5">
-                <span id="cardIboostA" class="text-3xl sm:text-4xl font-mono font-bold text-slate-900">1,954</span>
+                <span id="cardIboostA" class="text-3xl sm:text-4xl font-mono font-bold text-slate-900">1,806</span>
                 <span class="text-sm font-bold text-amber-700">A</span>
               </div>
-              <div class="text-xs font-mono text-slate-500 mt-0.5">
-                = <span id="cardIboostKA" class="font-bold text-slate-800">1.954</span> kA
+              <div class="text-xs font-mono text-slate-600 mt-0.5">
+                = <span id="cardIboostKA" class="font-bold text-slate-900">1.806</span> kA &middot; ตั้งหน้าตู้แนะนำ <span id="cardIboostSet" class="font-bold text-amber-800">1.85</span> kA
               </div>
               <p class="mt-2.5 text-xs text-slate-600 border-t border-amber-200/60 pt-2">
-                ดันอุณหภูมิตัวนำให้แตะ 95 °C ภายใน 5 ชม.
+                ไต่อุณหภูมิเข้าสู่ช่วง 95 °C พอดีที่เวลา 4.5 - 5 ชม.
               </p>
             </div>
 
@@ -201,11 +201,11 @@
                 <span class="font-mono text-slate-500">5 - 8 ชม. (&ge; 2h)</span>
               </div>
               <div class="flex items-baseline gap-1.5">
-                <span id="cardIholdA" class="text-3xl sm:text-4xl font-mono font-bold text-red-600">1,734</span>
+                <span id="cardIholdA" class="text-3xl sm:text-4xl font-mono font-bold text-red-600">1,707</span>
                 <span class="text-sm font-bold text-red-600">A</span>
               </div>
-              <div class="text-xs font-mono text-slate-500 mt-0.5">
-                = <span id="cardIholdKA" class="font-bold text-slate-800">1.734</span> kA
+              <div class="text-xs font-mono text-slate-600 mt-0.5">
+                = <span id="cardIholdKA" class="font-bold text-slate-900">1.707</span> kA &middot; ตั้งหน้าตู้แนะนำ <span id="cardIholdSet" class="font-bold text-red-700">1.70</span> kA
               </div>
               <p class="mt-2.5 text-xs text-slate-600 border-t border-red-200/60 pt-2">
                 ล็อกให้อุณหภูมิคงที่ <span id="cardHoldTargetLabel" class="font-semibold text-slate-900">97.5 °C</span> นาน 3 ชม.
@@ -402,8 +402,10 @@
 
     const cardIboostA = document.getElementById('cardIboostA');
     const cardIboostKA = document.getElementById('cardIboostKA');
+    const cardIboostSet = document.getElementById('cardIboostSet');
     const cardIholdA = document.getElementById('cardIholdA');
     const cardIholdKA = document.getElementById('cardIholdKA');
+    const cardIholdSet = document.getElementById('cardIholdSet');
     const cardHoldTargetLabel = document.getElementById('cardHoldTargetLabel');
 
     const kpiSheath = document.getElementById('kpiSheath');
@@ -417,8 +419,10 @@
     const holdDurationCheck = document.getElementById('holdDurationCheck');
     const coolingCheck = document.getElementById('coolingCheck');
 
-    const R_TH_EFF = 0.6923;
-    const TAU_HOURS = 2.71;
+    const R_TH_HOLD = 0.715; // K.m/W (Calibrated steady-state thermal resistance from lab data)
+    const R_TH_RAMP = 0.815; // K.m/W (Calibrated ramp-up thermal resistance)
+    const TAU_RAMP = 2.60;   // hours (Calibrated ramp time constant)
+    const TAU_COOL = 2.71;   // hours (Calibrated cooling time constant)
     const ALPHA20 = 0.00393;
     const R20 = 0.0221 / 1000.0;
     const K_AC = 1.090;
@@ -428,20 +432,23 @@
     }
 
     function calculateModel(tamb, target, rampHours) {
+      // 1. Steady State Holding Current
       const racTarget = getRac(target);
       const deltaTHold = target - tamb;
-      const powerHold = deltaTHold / R_TH_EFF;
+      const powerHold = deltaTHold / R_TH_HOLD;
       const iHoldA = Math.sqrt(powerHold / racTarget);
 
-      const expFactor = 1.0 - Math.exp(-rampHours / TAU_HOURS);
-      const deltaSSReq = (95.0 - tamb) / expFactor;
+      // 2. Ramp-up Boost Current: calibrated to reach 95 °C smoothly at ~4.5 - 5.0h
+      const targetAtRampEnd = 95.0 + Math.max(0, (target - 95.0) * 0.4);
+      const expFactor = 1.0 - Math.exp(-rampHours / TAU_RAMP);
+      const deltaSSReq = (targetAtRampEnd - tamb) / expFactor;
       const tAvgRamp = (tamb + 95.0) / 2.0;
       const racRamp = getRac(tAvgRamp);
-      const powerBoost = deltaSSReq / R_TH_EFF;
+      const powerBoost = deltaSSReq / R_TH_RAMP;
       const iBoostA = Math.sqrt(powerBoost / racRamp);
 
       const sheathEst = tamb + (target - tamb) / 2.81;
-      const cooled16h = tamb + (target - tamb) * Math.exp(-16.0 / TAU_HOURS);
+      const cooled16h = tamb + (target - tamb) * Math.exp(-16.0 / TAU_COOL);
 
       const totalLoopPkW = (powerHold * 14.0) / 1000.0;
       const zLoop = 0.00374;
@@ -463,9 +470,15 @@
 
       cardIboostA.textContent = Math.round(res.iBoostA).toLocaleString();
       cardIboostKA.textContent = (res.iBoostA / 1000.0).toFixed(3);
+      if (cardIboostSet) {
+        cardIboostSet.textContent = (Math.ceil(res.iBoostA / 50.0) * 0.05).toFixed(2);
+      }
 
       cardIholdA.textContent = Math.round(res.iHoldA).toLocaleString();
       cardIholdKA.textContent = (res.iHoldA / 1000.0).toFixed(3);
+      if (cardIholdSet) {
+        cardIholdSet.textContent = (Math.round(res.iHoldA / 50.0) * 0.05).toFixed(2);
+      }
       cardHoldTargetLabel.textContent = target.toFixed(1) + ' °C';
 
       kpiSheath.textContent = '~' + res.sheathEst.toFixed(1) + ' °C';
@@ -505,19 +518,20 @@
     function generateSimData(tamb, target, rampHours) {
       const res = calculateModel(tamb, target, rampHours);
       const pts = [];
-      const deltaSSBoost = (95.0 - tamb) / (1.0 - Math.exp(-rampHours / TAU_HOURS));
+      const targetAtRampEnd = 95.0 + Math.max(0, (target - 95.0) * 0.4);
+      const deltaSSBoost = (targetAtRampEnd - tamb) / (1.0 - Math.exp(-rampHours / TAU_RAMP));
 
       for (let t = 0; t <= 24.0; t += 0.25) {
         let tempC, currA;
         if (t <= rampHours) {
-          tempC = tamb + deltaSSBoost * (1.0 - Math.exp(-t / TAU_HOURS));
+          tempC = tamb + deltaSSBoost * (1.0 - Math.exp(-t / TAU_RAMP));
           currA = res.iBoostA;
         } else if (t <= 8.0) {
           tempC = target;
           currA = res.iHoldA;
         } else {
           const tCool = t - 8.0;
-          tempC = tamb + (target - tamb) * Math.exp(-tCool / TAU_HOURS);
+          tempC = tamb + (target - tamb) * Math.exp(-tCool / TAU_COOL);
           currA = 0;
         }
         pts.push({ x: t, y: Math.round(tempC * 10) / 10, current: Math.round(currA) });

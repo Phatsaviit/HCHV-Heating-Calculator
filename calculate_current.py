@@ -88,11 +88,108 @@ def estimate_conductor_temp_from_sheath(tc_sheath_c, tamb_c):
     """
     return round(tc_sheath_c + 1.81 * (tc_sheath_c - tamb_c), 1)
 
+def calculate_heating_time(current_a, t_start_c, t_target_c, tamb_c):
+    """
+    Calculate time required to reach target conductor temperature under constant heating current.
+    """
+    R_TH = 0.717
+    C_TH = 10100.0  # J/(K.m)
+    alpha20 = 0.00393
+    r_dc_20_per_m = 0.0221 / 1000.0
+    k_ac = 1.090
+
+    k = (current_a ** 2) * r_dc_20_per_m * k_ac * R_TH
+    denom = 1.0 - k * alpha20
+    if denom <= 0:
+        return {
+            "possible": False,
+            "reason": "กระแสสูงเกินพิกัดเสี่ยงต่อ Thermal Runaway",
+            "t_infinity_c": None
+        }
+    
+    t_inf = (tamb_c + k * (1.0 - 20.0 * alpha20)) / denom
+    if t_inf <= t_target_c:
+        return {
+            "possible": False,
+            "reason": f"กระแส {current_a:.0f} A ไม่เพียงพอต่อการดันถึง {t_target_c:.1f} °C (อุณหภูมิคงที่สูงสุดทำได้เพียง {t_inf:.1f} °C)",
+            "t_infinity_c": round(t_inf, 1)
+        }
+    
+    tau_eff = (R_TH * C_TH / 3600.0) / denom
+    if t_start_c >= t_target_c:
+        return {
+            "possible": True,
+            "time_hours": 0.0,
+            "hours": 0,
+            "minutes": 0,
+            "formatted": "0 ชม. 00 นาที",
+            "t_infinity_c": round(t_inf, 1),
+            "tau_eff_hours": round(tau_eff, 2)
+        }
+    
+    time_hours = tau_eff * math.log((t_inf - t_start_c) / (t_inf - t_target_c))
+    total_mins = int(round(time_hours * 60))
+    h = total_mins // 60
+    m = total_mins % 60
+    
+    return {
+        "possible": True,
+        "time_hours": round(time_hours, 3),
+        "hours": h,
+        "minutes": m,
+        "formatted": f"{h} ชม. {m:02d} นาที",
+        "t_infinity_c": round(t_inf, 1),
+        "tau_eff_hours": round(tau_eff, 2)
+    }
+
+def calculate_cooling_time(t_start_c, t_target_c, tamb_c):
+    """
+    Calculate time required to naturally cool down to target conductor temperature after stopping current.
+    """
+    TAU_COOL = 2.60 # hours
+    if t_target_c <= tamb_c:
+        return {
+            "possible": False,
+            "reason": f"อุณหภูมิเป้าหมาย {t_target_c:.1f} °C ต่ำกว่าหรือเท่ากับอุณหภูมิห้อง {tamb_c:.1f} °C (ไม่สามารถระบายความร้อนตามธรรมชาติให้ต่ำกว่าอุณหภูมิห้องได้)"
+        }
+    
+    if t_start_c <= t_target_c:
+        return {
+            "possible": True,
+            "time_hours": 0.0,
+            "hours": 0,
+            "minutes": 0,
+            "formatted": "0 ชม. 00 นาที",
+            "temp_16h_c": round(tamb_c + (t_start_c - tamb_c) * math.exp(-16.0 / TAU_COOL), 1),
+            "iec_pass": True
+        }
+    
+    time_hours = TAU_COOL * math.log((t_start_c - tamb_c) / (t_target_c - tamb_c))
+    total_mins = int(round(time_hours * 60))
+    h = total_mins // 60
+    m = total_mins % 60
+    
+    t_16h = tamb_c + (t_start_c - tamb_c) * math.exp(-16.0 / TAU_COOL)
+    iec_pass = (t_16h <= 30.0) or (t_16h <= tamb_c + 10.0)
+    
+    return {
+        "possible": True,
+        "time_hours": round(time_hours, 3),
+        "hours": h,
+        "minutes": m,
+        "formatted": f"{h} ชม. {m:02d} นาที",
+        "temp_16h_c": round(t_16h, 1),
+        "iec_pass": iec_pass
+    }
+
 def main():
-    parser = argparse.ArgumentParser(description="HCHV Heating Current Profile Calculator")
+    parser = argparse.ArgumentParser(description="HCHV Heating Current Profile & Thermal Transient Calculator")
     parser.add_argument("--tamb", type=float, default=32.0, help="Ambient temperature in deg C (default: 32.0)")
     parser.add_argument("--target", type=float, default=97.0, help="Target conductor temp in deg C (default: 97.0)")
     parser.add_argument("--ramp_hrs", type=float, default=5.0, help="Ramp up hours to reach 95 deg C (default: 5.0)")
+    parser.add_argument("--heat_curr", type=float, default=None, help="Calculate heating time for this current (A)")
+    parser.add_argument("--t_start", type=float, default=30.0, help="Start temp for heating/cooling calc (deg C)")
+    parser.add_argument("--cool_target", type=float, default=None, help="Calculate cooling time to reach this temp (deg C)")
     args = parser.parse_args()
 
     res = predict_heating_profile(args.tamb, args.target, args.ramp_hrs)
@@ -100,7 +197,7 @@ def main():
     print("\n" + "="*65)
     print(" HCHV CABLE HEATING PROFILE RECOMMENDATION (IEC 60840)")
     print(" Cable: 115 kV 1x800 SQ.MM. Copper XLPE (14m Loop)")
-    print(" Grounded directly on actual test database (77 recorded points)")
+    print(" Grounded directly on actual test database (4,530 recorded points)")
     print("="*65)
     print(f" Ambient Temperature (Tamb)     : {res['Tamb_C']} deg C")
     print(f" Target Conductor Temp (Tavg)    : {res['Target_Conductor_Temp_C']} deg C (Standard: 95 - 100 deg C)")
@@ -119,11 +216,28 @@ def main():
     print(f"  --> Stop current (0 A) -> Expected temp at 16h: {res['Expected_Cooled_Temp_16h_C']} deg C")
     print(f"  --> Conformance with IEC: {'PASSED (<= 30 deg C or <= Tamb+10 K)' if res['Cooling_Standard_Pass'] else 'CHECK'}")
     print("-" * 65)
-    print(" [ACTUAL LAB BENCHMARKS FOR COMPARISON]")
-    print("  - Cycle 1 (Tamb 28.5 C): Boost Set 1.90 kA -> 93.9 C (4h), Hold Set 1.70 kA -> 96.5 C")
-    print("  - Cycle 2 (Tamb 32.0 C): Boost Set 1.85 kA -> 91.2 C (4h), Hold Set 1.70 kA -> 97.0 C")
-    print("  - Cycle 3 (Tamb 32.5 C): Boost Set 1.85 kA -> 91.3 C (4h), Hold Set 1.70 kA -> 97.0 C")
-    print("  - Joint Temp (T4 / T5) : T4 peak ~53 C (hold ~51 C), T5 peak ~46 C (hold ~44 C)")
+    
+    # Heating Time Evaluation if requested
+    heat_i = args.heat_curr if args.heat_curr else res['Phase1_Boost_Current_A']
+    h_res = calculate_heating_time(heat_i, args.t_start, 95.0, args.tamb)
+    print(f" [TIME TO HEAT EVALUATION]")
+    if h_res["possible"]:
+        print(f"  --> Current {heat_i:.0f} A from {args.t_start:.1f} C to 95.0 C : {h_res['formatted']} (~{h_res['time_hours']:.2f} hrs)")
+        print(f"  --> Max Steady-State Temp (T_infinity) : {h_res['t_infinity_c']} deg C")
+    else:
+        print(f"  --> Notice: {h_res['reason']}")
+    print("-" * 65)
+
+    # Cooling Time Evaluation if requested
+    c_target = args.cool_target if args.cool_target else 35.0
+    c_res = calculate_cooling_time(args.target, c_target, args.tamb)
+    print(f" [TIME TO COOL EVALUATION]")
+    if c_res["possible"]:
+        print(f"  --> Cool from {args.target:.1f} C down to {c_target:.1f} C : {c_res['formatted']} (~{c_res['time_hours']:.2f} hrs)")
+        print(f"  --> Temp at 16h: {c_res['temp_16h_c']} deg C | IEC: {'PASSED' if c_res['iec_pass'] else 'CHECK'}")
+    else:
+        print(f"  --> Notice: {c_res['reason']}")
+
     print("="*65 + "\n")
 
 if __name__ == "__main__":

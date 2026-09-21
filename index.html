@@ -156,18 +156,21 @@
           <!-- Slider 3 -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center font-medium">
-              <label for="rampInput" class="text-slate-700">เวลาช่วงเร่ง (T1 ถึง T2):</label>
-              <div class="flex items-center bg-white rounded border border-slate-300 hover:border-slate-400 focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-600 px-2 py-0.5 shadow-sm transition">
-                <input type="number" id="rampInput" min="3.0" max="8.0" step="0.1" value="5.0" inputmode="decimal"
-                       class="w-14 sm:w-16 font-mono font-bold text-amber-700 text-right bg-transparent outline-none p-0 text-sm sm:text-base selection:bg-amber-100" />
-                <span class="text-xs font-bold text-amber-700 ml-1 select-none">ชม.</span>
+              <label class="text-slate-700">เวลาช่วงเร่ง (T1 ถึง T2):</label>
+              <div class="flex items-center gap-1 bg-white rounded border border-slate-300 hover:border-slate-400 focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-600 px-2 py-0.5 shadow-sm transition">
+                <input type="number" id="rampHoursInput" min="3" max="7" step="1" value="5" inputmode="numeric"
+                       class="w-7 sm:w-8 font-mono font-bold text-amber-700 text-right bg-transparent outline-none p-0 text-sm sm:text-base selection:bg-amber-100" />
+                <span class="text-xs font-bold text-amber-700 select-none">ชม.</span>
+                <input type="number" id="rampMinsInput" min="0" max="59" step="5" value="00" inputmode="numeric"
+                       class="w-8 sm:w-9 font-mono font-bold text-amber-700 text-right bg-transparent outline-none p-0 text-sm sm:text-base selection:bg-amber-100" />
+                <span class="text-xs font-bold text-amber-700 select-none">นาที</span>
               </div>
             </div>
-            <input type="range" id="rampSlider" min="4.0" max="6.0" step="0.1" value="5.0" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
+            <input type="range" id="rampSlider" min="240" max="360" step="5" value="300" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
             <div class="flex justify-between text-[11px] text-slate-400">
-              <span>4.0 ชม.</span>
-              <span>5.0 ชม. (แนะนำ)</span>
-              <span>6.0 ชม.</span>
+              <span>4 ชม. 00 นาที</span>
+              <span>5 ชม. 00 นาที (แนะนำ)</span>
+              <span>6 ชม. 00 นาที</span>
             </div>
           </div>
 
@@ -176,11 +179,11 @@
             <span class="font-semibold text-slate-700 block mb-1">เกณฑ์เวลาตามมาตรฐาน IEC:</span>
             <div class="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
               <span class="text-slate-600">เวลาร้อนรวม (T1 ถึง T3)</span>
-              <span class="font-bold text-emerald-700">8.0 ชม. (&ge; 8h ผ่าน)</span>
+              <span class="font-bold text-emerald-700">8 ชม. 00 นาที (&ge; 8h ผ่าน)</span>
             </div>
             <div class="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
               <span class="text-slate-600">เวลาคงที่ 95-100 °C (T2 ถึง T3)</span>
-              <span class="font-bold text-emerald-700" id="holdDurationCheck">3.0 ชม. (&ge; 2h ผ่าน)</span>
+              <span class="font-bold text-emerald-700" id="holdDurationCheck">3 ชม. 00 นาที (&ge; 2h ผ่าน)</span>
             </div>
             <div class="flex items-center justify-between p-2 rounded bg-white border border-slate-200">
               <span class="text-slate-600">Cooling 16h สู่ &le; 30°C หรือ Tamb+10</span>
@@ -198,7 +201,7 @@
             <div class="bg-amber-50/60 rounded-xl border border-amber-200 p-4 sm:p-5">
               <div class="flex items-center justify-between text-xs text-amber-800 font-semibold mb-1.5">
                 <span>ช่วงที่ 1: กระแสเร่ง (Boost)</span>
-                <span class="font-mono text-slate-500">0 - 5 ชม.</span>
+                <span class="font-mono text-slate-500" id="cardBoostHoursLabel">0 - 5 ชม. 00 นาที</span>
               </div>
               <div class="flex items-baseline gap-1.5">
                 <span id="cardIboostA" class="text-3xl sm:text-4xl font-mono font-bold text-slate-900">1,806</span>
@@ -208,7 +211,7 @@
                 = <span id="cardIboostKA" class="font-bold text-slate-900">1.806</span> kA &middot; ตั้งหน้าตู้แนะนำ <span id="cardIboostSet" class="font-bold text-amber-800">1.85</span> kA
               </div>
               <p class="mt-2.5 text-xs text-slate-600 border-t border-amber-200/60 pt-2">
-                ไต่อุณหภูมิเข้าสู่ช่วง 95 °C พอดีที่เวลา 4.5 - 5 ชม.
+                ไต่อุณหภูมิเข้าสู่ช่วง 95 °C พอดีที่เวลา <span id="cardBoostRampText" class="font-semibold text-slate-900">5 ชม. 00 นาที</span>
               </p>
             </div>
 
@@ -216,7 +219,7 @@
             <div class="bg-red-50/60 rounded-xl border border-red-200 p-4 sm:p-5">
               <div class="flex items-center justify-between text-xs text-red-800 font-semibold mb-1.5">
                 <span>ช่วงที่ 2: กระแสคงที่ (Hold)</span>
-                <span class="font-mono text-slate-500">5 - 8 ชม. (&ge; 2h)</span>
+                <span class="font-mono text-slate-500" id="cardHoldHoursLabel">5 ชม. 00 นาที - 8 ชม.</span>
               </div>
               <div class="flex items-baseline gap-1.5">
                 <span id="cardIholdA" class="text-3xl sm:text-4xl font-mono font-bold text-red-600">1,707</span>
@@ -226,7 +229,7 @@
                 = <span id="cardIholdKA" class="font-bold text-slate-900">1.707</span> kA &middot; ตั้งหน้าตู้แนะนำ <span id="cardIholdSet" class="font-bold text-red-700">1.70</span> kA
               </div>
               <p class="mt-2.5 text-xs text-slate-600 border-t border-red-200/60 pt-2">
-                ล็อกให้อุณหภูมิคงที่ <span id="cardHoldTargetLabel" class="font-semibold text-slate-900">97.5 °C</span> นาน 3 ชม.
+                ล็อกให้อุณหภูมิคงที่ <span id="cardHoldTargetLabel" class="font-semibold text-slate-900">97.5 °C</span> นาน <span id="cardHoldDurationLabel" class="font-semibold text-slate-900">3 ชม. 00 นาที</span>
               </p>
             </div>
 
@@ -1017,7 +1020,8 @@
 
     const tambInput = document.getElementById('tambInput');
     const targetInput = document.getElementById('targetInput');
-    const rampInput = document.getElementById('rampInput');
+    const rampHoursInput = document.getElementById('rampHoursInput');
+    const rampMinsInput = document.getElementById('rampMinsInput');
 
     const cardIboostA = document.getElementById('cardIboostA');
     const cardIboostKA = document.getElementById('cardIboostKA');
@@ -1026,6 +1030,11 @@
     const cardIholdKA = document.getElementById('cardIholdKA');
     const cardIholdSet = document.getElementById('cardIholdSet');
     const cardHoldTargetLabel = document.getElementById('cardHoldTargetLabel');
+
+    const cardBoostHoursLabel = document.getElementById('cardBoostHoursLabel');
+    const cardBoostRampText = document.getElementById('cardBoostRampText');
+    const cardHoldHoursLabel = document.getElementById('cardHoldHoursLabel');
+    const cardHoldDurationLabel = document.getElementById('cardHoldDurationLabel');
 
     const kpiSheath = document.getElementById('kpiSheath');
     const kpiJoint = document.getElementById('kpiJoint');
@@ -1038,6 +1047,34 @@
 
     const holdDurationCheck = document.getElementById('holdDurationCheck');
     const coolingCheck = document.getElementById('coolingCheck');
+
+    function formatHoursMinutes(hoursFloat) {
+      const totalMins = Math.round(hoursFloat * 60);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      if (m === 0) return `${h} ชม.`;
+      return `${h} ชม. ${m} นาที`;
+    }
+
+    function formatHoursMinutesFull(hoursFloat) {
+      const totalMins = Math.round(hoursFloat * 60);
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      if (m === 0) return `${h} ชม. 00 นาที`;
+      return `${h} ชม. ${String(m).padStart(2, '0')} นาที`;
+    }
+
+    function getRampHours() {
+      let h = parseInt(rampHoursInput.value);
+      let m = parseInt(rampMinsInput.value);
+      if (isNaN(h)) h = 5;
+      if (isNaN(m)) m = 0;
+      let totalH = h + (m / 60.0);
+      if (isNaN(totalH) || totalH < 2.0 || totalH > 10.0) {
+        totalH = parseFloat(rampSlider.value) / 60.0;
+      }
+      return totalH;
+    }
 
     // Calibrated directly from actual 4,530 data points in HCHV 115 kV.xlsx (Test_Record):
     const R_TH_HOLD_ACTUAL = 0.717; // K.m/W (Mean steady-state thermal resistance from 521 mins holding)
@@ -1083,8 +1120,10 @@
       let target = parseFloat(targetInput.value);
       if (isNaN(target)) target = parseFloat(targetSlider.value);
 
-      let rampHours = parseFloat(rampInput.value);
-      if (isNaN(rampHours)) rampHours = parseFloat(rampSlider.value);
+      let rampHours = getRampHours();
+      const totalMins = Math.round(rampHours * 60);
+      const curH = Math.floor(totalMins / 60);
+      const curM = totalMins % 60;
 
       // Keep inputs and sliders synchronized
       if (document.activeElement !== tambInput) {
@@ -1093,8 +1132,11 @@
       if (document.activeElement !== targetInput) {
         targetInput.value = target.toFixed(1);
       }
-      if (document.activeElement !== rampInput) {
-        rampInput.value = rampHours.toFixed(1);
+      if (document.activeElement !== rampHoursInput) {
+        rampHoursInput.value = curH;
+      }
+      if (document.activeElement !== rampMinsInput) {
+        rampMinsInput.value = String(curM).padStart(2, '0');
       }
 
       if (document.activeElement === tambInput) {
@@ -1107,9 +1149,9 @@
           targetSlider.value = target;
         }
       }
-      if (document.activeElement === rampInput) {
-        if (rampHours >= parseFloat(rampSlider.min) && rampHours <= parseFloat(rampSlider.max)) {
-          rampSlider.value = rampHours;
+      if (document.activeElement === rampHoursInput || document.activeElement === rampMinsInput) {
+        if (totalMins >= parseInt(rampSlider.min) && totalMins <= parseInt(rampSlider.max)) {
+          rampSlider.value = totalMins;
         }
       }
 
@@ -1128,6 +1170,19 @@
       }
       cardHoldTargetLabel.textContent = target.toFixed(1) + ' °C';
 
+      if (cardBoostHoursLabel) {
+        cardBoostHoursLabel.textContent = `0 - ${formatHoursMinutesFull(rampHours)}`;
+      }
+      if (cardBoostRampText) {
+        cardBoostRampText.textContent = formatHoursMinutesFull(rampHours);
+      }
+      if (cardHoldHoursLabel) {
+        cardHoldHoursLabel.textContent = `${formatHoursMinutesFull(rampHours)} - 8 ชม.`;
+      }
+      if (cardHoldDurationLabel) {
+        cardHoldDurationLabel.textContent = formatHoursMinutesFull(8.0 - rampHours);
+      }
+
       kpiSheath.textContent = '~' + res.sheathEst.toFixed(1) + ' °C';
       const j4Est = tamb + 0.274 * (target - tamb);
       const j5Est = tamb + 0.175 * (target - tamb);
@@ -1138,7 +1193,10 @@
       kpiVoltage.textContent = '~' + res.vInject.toFixed(1) + ' V';
       kpiCool.textContent = '≤ ' + res.cooled16h.toFixed(1) + ' °C';
 
-      holdDurationCheck.textContent = (8.0 - rampHours).toFixed(1) + ' ชม. (≥ 2h ผ่าน)';
+      const holdH = 8.0 - rampHours;
+      const passText = (holdH >= 2.0) ? 'ผ่าน' : 'ต่ำกว่าเกณฑ์';
+      holdDurationCheck.textContent = `${formatHoursMinutesFull(holdH)} (≥ 2h ${passText})`;
+      holdDurationCheck.className = (holdH >= 2.0) ? 'font-bold text-emerald-700' : 'font-bold text-red-600';
       coolingCheck.textContent = '≤ ' + res.cooled16h.toFixed(1) + ' °C (ผ่าน)';
 
       updateMethod2();
@@ -1158,8 +1216,11 @@
       tambInput.value = Number(tamb).toFixed(1);
       targetSlider.value = target;
       targetInput.value = Number(target).toFixed(1);
-      rampSlider.value = ramp;
-      rampInput.value = Number(ramp).toFixed(1);
+
+      const totalMins = Math.round(ramp * 60);
+      rampSlider.value = totalMins;
+      rampHoursInput.value = Math.floor(totalMins / 60);
+      rampMinsInput.value = String(totalMins % 60).padStart(2, '0');
       updateUI();
     }
 
@@ -1269,8 +1330,7 @@
       if (isNaN(tamb)) tamb = parseFloat(tambSlider.value);
       let target = parseFloat(targetInput.value);
       if (isNaN(target)) target = parseFloat(targetSlider.value);
-      let rampHours = parseFloat(rampInput.value);
-      if (isNaN(rampHours)) rampHours = parseFloat(rampSlider.value);
+      let rampHours = getRampHours();
       const simPts = generateSimData(tamb, target, rampHours);
 
       const datasets = [];
@@ -1433,7 +1493,9 @@
       updateUI();
     });
     rampSlider.addEventListener('input', () => {
-      rampInput.value = parseFloat(rampSlider.value).toFixed(1);
+      const totalMins = parseInt(rampSlider.value);
+      rampHoursInput.value = Math.floor(totalMins / 60);
+      rampMinsInput.value = String(totalMins % 60).padStart(2, '0');
       updateUI();
     });
 
@@ -1468,23 +1530,45 @@
       updateUI();
     });
 
-    rampInput.addEventListener('input', () => {
-      const v = parseFloat(rampInput.value);
-      if (!isNaN(v) && v >= 2.0 && v <= 10.0) {
-        updateUI();
+    // Hours and Minutes direct input with automatic decimal handling (e.g. typing 5.5 or 5.7)
+    rampHoursInput.addEventListener('input', () => {
+      if (rampHoursInput.value.includes('.')) {
+        const v = parseFloat(rampHoursInput.value);
+        if (!isNaN(v)) {
+          const h = Math.floor(v);
+          const m = Math.round((v - h) * 60);
+          rampHoursInput.value = h;
+          rampMinsInput.value = String(m).padStart(2, '0');
+        }
       }
+      updateUI();
     });
-    rampInput.addEventListener('blur', () => {
-      let v = parseFloat(rampInput.value);
-      if (isNaN(v) || v < 3.0) v = 4.0;
-      if (v > 8.0) v = 8.0;
-      rampInput.value = v.toFixed(1);
-      rampSlider.value = Math.min(Math.max(v, parseFloat(rampSlider.min)), parseFloat(rampSlider.max));
+    rampHoursInput.addEventListener('blur', () => {
+      let h = parseInt(rampHoursInput.value);
+      if (isNaN(h) || h < 2) h = 4;
+      if (h > 7) h = 6;
+      rampHoursInput.value = h;
+      updateUI();
+    });
+
+    rampMinsInput.addEventListener('input', () => {
+      updateUI();
+    });
+    rampMinsInput.addEventListener('blur', () => {
+      let m = parseInt(rampMinsInput.value);
+      if (isNaN(m) || m < 0) m = 0;
+      if (m >= 60) {
+        const extraH = Math.floor(m / 60);
+        let curH = parseInt(rampHoursInput.value) || 5;
+        rampHoursInput.value = curH + extraH;
+        m = m % 60;
+      }
+      rampMinsInput.value = String(m).padStart(2, '0');
       updateUI();
     });
 
     // Enter key submits/formats value
-    [tambInput, targetInput, rampInput].forEach(inp => {
+    [tambInput, targetInput, rampHoursInput, rampMinsInput].forEach(inp => {
       inp.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           inp.blur();

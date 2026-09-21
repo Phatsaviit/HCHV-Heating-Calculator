@@ -37,6 +37,15 @@
         width: 26px;
       }
     }
+    /* Hide number input spinners for clean inline badge appearance */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
   </style>
 </head>
 <body class="bg-white min-h-screen flex flex-col antialiased text-slate-900">
@@ -111,28 +120,32 @@
           <!-- Slider 1 -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center font-medium">
-              <label for="tambSlider" class="text-slate-700">อุณหภูมิห้อง (Tamb):</label>
-              <span id="tambBadge" class="font-mono font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-slate-200">
-                32.0 °C
-              </span>
+              <label for="tambInput" class="text-slate-700">อุณหภูมิห้อง (Tamb):</label>
+              <div class="flex items-center bg-white rounded border border-slate-300 hover:border-slate-400 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 px-2 py-0.5 shadow-sm transition">
+                <input type="number" id="tambInput" min="15.0" max="45.0" step="0.1" value="32.0" inputmode="decimal"
+                       class="w-14 sm:w-16 font-mono font-bold text-blue-700 text-right bg-transparent outline-none p-0 text-sm sm:text-base selection:bg-blue-100" />
+                <span class="text-xs font-bold text-blue-700 ml-1 select-none">°C</span>
+              </div>
             </div>
-            <input type="range" id="tambSlider" min="20.0" max="40.0" step="0.5" value="32.0" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
+            <input type="range" id="tambSlider" min="20.0" max="40.0" step="0.1" value="32.0" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
             <div class="flex justify-between text-[11px] text-slate-400">
-              <span>20 °C</span>
-              <span>30 °C</span>
-              <span>40 °C</span>
+              <span>20.0 °C</span>
+              <span>30.0 °C</span>
+              <span>40.0 °C</span>
             </div>
           </div>
 
           <!-- Slider 2 -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center font-medium">
-              <label for="targetSlider" class="text-slate-700">เป้าหมายตัวนำ (Target):</label>
-              <span id="targetBadge" class="font-mono font-bold text-red-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                97.5 °C
-              </span>
+              <label for="targetInput" class="text-slate-700">เป้าหมายตัวนำ (Target):</label>
+              <div class="flex items-center bg-white rounded border border-slate-300 hover:border-slate-400 focus-within:border-red-600 focus-within:ring-1 focus-within:ring-red-600 px-2 py-0.5 shadow-sm transition">
+                <input type="number" id="targetInput" min="90.0" max="105.0" step="0.1" value="97.5" inputmode="decimal"
+                       class="w-14 sm:w-16 font-mono font-bold text-red-600 text-right bg-transparent outline-none p-0 text-sm sm:text-base selection:bg-red-100" />
+                <span class="text-xs font-bold text-red-600 ml-1 select-none">°C</span>
+              </div>
             </div>
-            <input type="range" id="targetSlider" min="95.0" max="100.0" step="0.5" value="97.5" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
+            <input type="range" id="targetSlider" min="95.0" max="100.0" step="0.1" value="97.5" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
             <div class="flex justify-between text-[11px] text-slate-400">
               <span>95.0 °C</span>
               <span>97.5 °C</span>
@@ -143,12 +156,14 @@
           <!-- Slider 3 -->
           <div class="space-y-1.5">
             <div class="flex justify-between items-center font-medium">
-              <label for="rampSlider" class="text-slate-700">เวลาช่วงเร่ง (T1 ถึง T2):</label>
-              <span id="rampBadge" class="font-mono font-bold text-amber-700 bg-white px-2 py-0.5 rounded border border-slate-200">
-                5.0 ชม.
-              </span>
+              <label for="rampInput" class="text-slate-700">เวลาช่วงเร่ง (T1 ถึง T2):</label>
+              <div class="flex items-center bg-white rounded border border-slate-300 hover:border-slate-400 focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-600 px-2 py-0.5 shadow-sm transition">
+                <input type="number" id="rampInput" min="3.0" max="8.0" step="0.1" value="5.0" inputmode="decimal"
+                       class="w-14 sm:w-16 font-mono font-bold text-amber-700 text-right bg-transparent outline-none p-0 text-sm sm:text-base selection:bg-amber-100" />
+                <span class="text-xs font-bold text-amber-700 ml-1 select-none">ชม.</span>
+              </div>
             </div>
-            <input type="range" id="rampSlider" min="4.0" max="6.0" step="0.5" value="5.0" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
+            <input type="range" id="rampSlider" min="4.0" max="6.0" step="0.1" value="5.0" class="w-full bg-slate-200 rounded appearance-none cursor-pointer">
             <div class="flex justify-between text-[11px] text-slate-400">
               <span>4.0 ชม.</span>
               <span>5.0 ชม. (แนะนำ)</span>
@@ -1000,9 +1015,9 @@
     const targetSlider = document.getElementById('targetSlider');
     const rampSlider = document.getElementById('rampSlider');
 
-    const tambBadge = document.getElementById('tambBadge');
-    const targetBadge = document.getElementById('targetBadge');
-    const rampBadge = document.getElementById('rampBadge');
+    const tambInput = document.getElementById('tambInput');
+    const targetInput = document.getElementById('targetInput');
+    const rampInput = document.getElementById('rampInput');
 
     const cardIboostA = document.getElementById('cardIboostA');
     const cardIboostKA = document.getElementById('cardIboostKA');
@@ -1024,12 +1039,12 @@
     const holdDurationCheck = document.getElementById('holdDurationCheck');
     const coolingCheck = document.getElementById('coolingCheck');
 
-    // Calibrated directly from actual 77 data points in HCHV_Test_Database.xlsx:
-    const R_TH_HOLD_ACTUAL = 0.718; // K.m/W (Mean steady-state thermal resistance from Cycles 1, 2, 3)
-    const BASELINE_BOOST_A = 1830.0; // Measured actual boost current in Cycles 2-3 at Tamb 32.0 C
+    // Calibrated directly from actual 4,530 data points in HCHV 115 kV.xlsx (Test_Record):
+    const R_TH_HOLD_ACTUAL = 0.717; // K.m/W (Mean steady-state thermal resistance from 521 mins holding)
+    const BASELINE_BOOST_A = 1830.0; // Measured actual boost current in Cycles 2-4 at Tamb 32.0 C
     const BASELINE_TAMB = 32.0;
-    const TAU_RAMP = 2.60;   // hours (Calibrated dynamic ramp time constant)
-    const TAU_COOL = 2.70;   // hours (Calibrated natural cooling time constant)
+    const TAU_RAMP = 2.58;   // hours (Calibrated dynamic ramp time constant)
+    const TAU_COOL = 2.60;   // hours (Calibrated natural cooling time constant)
     const ALPHA20 = 0.00393;
     const R20 = 0.0221 / 1000.0;
     const K_AC = 1.090;
@@ -1045,13 +1060,13 @@
       const powerHold = dtHold / R_TH_HOLD_ACTUAL;
       const iHoldA = Math.sqrt(powerHold / racTarget);
 
-      // 2. Boost Current: scaled directly from lab test baseline (Cycle 2-3: 1,830 A at Tamb 32.0 C, 5.0h)
+      // 2. Boost Current: scaled directly from lab test baseline (Cycle 2-4: 1,830 A at Tamb 32.0 C, 5.0h)
       const dtReq = Math.max(10.0, 95.0 - tamb);
       const dtRef = 95.0 - BASELINE_TAMB; // 63.0 K
       const timeFactor = Math.pow(5.0 / rampHours, 0.28);
       const iBoostA = BASELINE_BOOST_A * Math.sqrt(dtReq / dtRef) * timeFactor;
 
-      const sheathEst = tamb + (target - tamb) / 2.81;
+      const sheathEst = tamb + (target - tamb) / 2.80;
       const cooled16h = tamb + (target - tamb) * Math.exp(-16.0 / TAU_COOL);
 
       const totalLoopPkW = (powerHold * 14.0) / 1000.0;
@@ -1062,13 +1077,41 @@
     }
 
     function updateUI() {
-      const tamb = parseFloat(tambSlider.value);
-      const target = parseFloat(targetSlider.value);
-      const rampHours = parseFloat(rampSlider.value);
+      let tamb = parseFloat(tambInput.value);
+      if (isNaN(tamb)) tamb = parseFloat(tambSlider.value);
 
-      tambBadge.textContent = tamb.toFixed(1) + ' °C';
-      targetBadge.textContent = target.toFixed(1) + ' °C';
-      rampBadge.textContent = rampHours.toFixed(1) + ' ชม.';
+      let target = parseFloat(targetInput.value);
+      if (isNaN(target)) target = parseFloat(targetSlider.value);
+
+      let rampHours = parseFloat(rampInput.value);
+      if (isNaN(rampHours)) rampHours = parseFloat(rampSlider.value);
+
+      // Keep inputs and sliders synchronized
+      if (document.activeElement !== tambInput) {
+        tambInput.value = tamb.toFixed(1);
+      }
+      if (document.activeElement !== targetInput) {
+        targetInput.value = target.toFixed(1);
+      }
+      if (document.activeElement !== rampInput) {
+        rampInput.value = rampHours.toFixed(1);
+      }
+
+      if (document.activeElement === tambInput) {
+        if (tamb >= parseFloat(tambSlider.min) && tamb <= parseFloat(tambSlider.max)) {
+          tambSlider.value = tamb;
+        }
+      }
+      if (document.activeElement === targetInput) {
+        if (target >= parseFloat(targetSlider.min) && target <= parseFloat(targetSlider.max)) {
+          targetSlider.value = target;
+        }
+      }
+      if (document.activeElement === rampInput) {
+        if (rampHours >= parseFloat(rampSlider.min) && rampHours <= parseFloat(rampSlider.max)) {
+          rampSlider.value = rampHours;
+        }
+      }
 
       const res = calculateModel(tamb, target, rampHours);
 
@@ -1086,8 +1129,8 @@
       cardHoldTargetLabel.textContent = target.toFixed(1) + ' °C';
 
       kpiSheath.textContent = '~' + res.sheathEst.toFixed(1) + ' °C';
-      const j4Est = tamb + 0.282 * (target - tamb);
-      const j5Est = tamb + 0.178 * (target - tamb);
+      const j4Est = tamb + 0.274 * (target - tamb);
+      const j5Est = tamb + 0.175 * (target - tamb);
       if (kpiJoint) {
         kpiJoint.textContent = `~${j4Est.toFixed(1)} / ${j5Est.toFixed(1)} °C`;
       }
@@ -1104,15 +1147,19 @@
 
     function updateMethod2() {
       const tcSheath = parseFloat(tcSheathInput.value) || 0;
-      const tamb = parseFloat(tambSlider.value);
-      const estCond = tcSheath + 1.81 * (tcSheath - tamb);
+      let tamb = parseFloat(tambInput.value);
+      if (isNaN(tamb)) tamb = parseFloat(tambSlider.value);
+      const estCond = tcSheath + 1.80 * (tcSheath - tamb);
       estCondResult.textContent = estCond.toFixed(1) + ' °C';
     }
 
     function setPreset(tamb, target, ramp) {
       tambSlider.value = tamb;
+      tambInput.value = Number(tamb).toFixed(1);
       targetSlider.value = target;
+      targetInput.value = Number(target).toFixed(1);
       rampSlider.value = ramp;
+      rampInput.value = Number(ramp).toFixed(1);
       updateUI();
     }
 
@@ -1218,9 +1265,12 @@
     function updateChart() {
       if (!myChart) return;
 
-      const tamb = parseFloat(tambSlider.value);
-      const target = parseFloat(targetSlider.value);
-      const rampHours = parseFloat(rampSlider.value);
+      let tamb = parseFloat(tambInput.value);
+      if (isNaN(tamb)) tamb = parseFloat(tambSlider.value);
+      let target = parseFloat(targetInput.value);
+      if (isNaN(target)) target = parseFloat(targetSlider.value);
+      let rampHours = parseFloat(rampInput.value);
+      if (isNaN(rampHours)) rampHours = parseFloat(rampSlider.value);
       const simPts = generateSimData(tamb, target, rampHours);
 
       const datasets = [];
@@ -1373,9 +1423,75 @@
       }
     }
 
-    tambSlider.addEventListener('input', updateUI);
-    targetSlider.addEventListener('input', updateUI);
-    rampSlider.addEventListener('input', updateUI);
+    // Slider events
+    tambSlider.addEventListener('input', () => {
+      tambInput.value = parseFloat(tambSlider.value).toFixed(1);
+      updateUI();
+    });
+    targetSlider.addEventListener('input', () => {
+      targetInput.value = parseFloat(targetSlider.value).toFixed(1);
+      updateUI();
+    });
+    rampSlider.addEventListener('input', () => {
+      rampInput.value = parseFloat(rampSlider.value).toFixed(1);
+      updateUI();
+    });
+
+    // Direct numeric input events (Real-time calculation with 0.1 precision)
+    tambInput.addEventListener('input', () => {
+      const v = parseFloat(tambInput.value);
+      if (!isNaN(v) && v >= 10.0 && v <= 55.0) {
+        updateUI();
+      }
+    });
+    tambInput.addEventListener('blur', () => {
+      let v = parseFloat(tambInput.value);
+      if (isNaN(v) || v < 15.0) v = 20.0;
+      if (v > 45.0) v = 45.0;
+      tambInput.value = v.toFixed(1);
+      tambSlider.value = Math.min(Math.max(v, parseFloat(tambSlider.min)), parseFloat(tambSlider.max));
+      updateUI();
+    });
+
+    targetInput.addEventListener('input', () => {
+      const v = parseFloat(targetInput.value);
+      if (!isNaN(v) && v >= 80.0 && v <= 115.0) {
+        updateUI();
+      }
+    });
+    targetInput.addEventListener('blur', () => {
+      let v = parseFloat(targetInput.value);
+      if (isNaN(v) || v < 90.0) v = 95.0;
+      if (v > 105.0) v = 105.0;
+      targetInput.value = v.toFixed(1);
+      targetSlider.value = Math.min(Math.max(v, parseFloat(targetSlider.min)), parseFloat(targetSlider.max));
+      updateUI();
+    });
+
+    rampInput.addEventListener('input', () => {
+      const v = parseFloat(rampInput.value);
+      if (!isNaN(v) && v >= 2.0 && v <= 10.0) {
+        updateUI();
+      }
+    });
+    rampInput.addEventListener('blur', () => {
+      let v = parseFloat(rampInput.value);
+      if (isNaN(v) || v < 3.0) v = 4.0;
+      if (v > 8.0) v = 8.0;
+      rampInput.value = v.toFixed(1);
+      rampSlider.value = Math.min(Math.max(v, parseFloat(rampSlider.min)), parseFloat(rampSlider.max));
+      updateUI();
+    });
+
+    // Enter key submits/formats value
+    [tambInput, targetInput, rampInput].forEach(inp => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          inp.blur();
+        }
+      });
+    });
+
     tcSheathInput.addEventListener('input', updateMethod2);
 
     window.addEventListener('DOMContentLoaded', () => {

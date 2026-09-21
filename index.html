@@ -86,16 +86,19 @@
           <h2 class="text-lg sm:text-xl font-bold text-slate-900">คำนวณกระแสจ่ายทดสอบ</h2>
           <p class="text-xs sm:text-sm text-slate-500 mt-0.5">ปรับอุณหภูมิห้องเพื่อหากระแสช่วงเร่ง (Boost) และช่วงคงที่ (Hold)</p>
         </div>
-        <div class="flex items-center gap-1.5 text-xs">
-          <span class="text-slate-500 mr-1">เลือกสภาวะ:</span>
-          <button onclick="setPreset(25.0, 97.5, 5.0)" class="px-2.5 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
-            25 °C แอร์
+        <div class="flex flex-wrap items-center gap-1.5 text-xs">
+          <span class="text-slate-500 mr-1">อิงรอบทดสอบจริง:</span>
+          <button onclick="setPreset(28.5, 96.5, 5.0)" class="px-2.5 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
+            Cycle 1 (28.5 °C)
           </button>
-          <button onclick="setPreset(32.5, 97.5, 5.0)" class="px-2.5 py-1 rounded border border-slate-900 bg-slate-900 text-white hover:bg-slate-800 transition font-medium">
-            32.5 °C แล็บ
+          <button onclick="setPreset(32.5, 97.0, 5.0)" class="px-2.5 py-1 rounded border border-slate-900 bg-slate-900 text-white hover:bg-slate-800 transition font-medium">
+            Cycle 2-3 (32.5 °C)
           </button>
-          <button onclick="setPreset(35.0, 97.5, 5.0)" class="px-2.5 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
-            35 °C ร้อน
+          <button onclick="setPreset(25.0, 97.0, 5.0)" class="px-2.5 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
+            ห้องแอร์ (25 °C)
+          </button>
+          <button onclick="setPreset(35.0, 97.0, 5.0)" class="px-2.5 py-1 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition">
+            วันที่ร้อน (35 °C)
           </button>
         </div>
       </div>
@@ -240,6 +243,28 @@
 
         </div>
 
+      </div>
+
+      <!-- Real Lab Benchmarks Card -->
+      <div class="pt-4 border-t border-slate-200">
+        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">ฐานข้อมูลอ้างอิงจากการทดสอบจริงในห้องปฏิบัติการ (77 จุดบันทึก):</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+          <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="font-bold text-slate-900">Cycle 1 (Tamb 28.5 &ndash; 31.8 &deg;C)</div>
+            <div class="text-slate-600 mt-1">Boost: <strong>1.90 kA</strong> &rarr; ตัวนำแตะ 93.9 &deg;C ที่ 4h, 96.6 &deg;C ที่ 5h</div>
+            <div class="text-slate-600 mt-0.5">Hold: <strong>1.70 kA</strong> &rarr; ล็อกคงที่ 96.2 &ndash; 96.7 &deg;C นาน 3 ชม.</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="font-bold text-slate-900">Cycle 2 (Tamb 29.2 &ndash; 33.3 &deg;C)</div>
+            <div class="text-slate-600 mt-1">Boost: <strong>1.85 kA</strong> &rarr; ตัวนำแตะ 91.2 &deg;C ที่ 4h, 96.5 &deg;C ที่ 5h</div>
+            <div class="text-slate-600 mt-0.5">Hold: <strong>1.70 / 1.65 kA</strong> &rarr; ล็อกคงที่ 96.3 &ndash; 97.3 &deg;C นาน 3 ชม.</div>
+          </div>
+          <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <div class="font-bold text-slate-900">Cycle 3 (Tamb 29.4 &ndash; 33.3 &deg;C)</div>
+            <div class="text-slate-600 mt-1">Boost: <strong>1.85 kA</strong> &rarr; ตัวนำแตะ 91.3 &deg;C ที่ 4h, 96.9 &deg;C ที่ 5h</div>
+            <div class="text-slate-600 mt-0.5">Hold: <strong>1.70 kA</strong> &rarr; ล็อกคงที่ 96.8 &ndash; 97.1 &deg;C นาน 3 ชม.</div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -419,10 +444,12 @@
     const holdDurationCheck = document.getElementById('holdDurationCheck');
     const coolingCheck = document.getElementById('coolingCheck');
 
-    const R_TH_HOLD = 0.715; // K.m/W (Calibrated steady-state thermal resistance from lab data)
-    const R_TH_RAMP = 0.815; // K.m/W (Calibrated ramp-up thermal resistance)
-    const TAU_RAMP = 2.60;   // hours (Calibrated ramp time constant)
-    const TAU_COOL = 2.71;   // hours (Calibrated cooling time constant)
+    // Calibrated directly from actual 77 data points in HCHV_Test_Database.xlsx:
+    const R_TH_HOLD_ACTUAL = 0.718; // K.m/W (Mean steady-state thermal resistance from Cycles 1, 2, 3)
+    const BASELINE_BOOST_A = 1830.0; // Measured actual boost current in Cycles 2-3 at Tamb 32.0 C
+    const BASELINE_TAMB = 32.0;
+    const TAU_RAMP = 2.60;   // hours (Calibrated dynamic ramp time constant)
+    const TAU_COOL = 2.70;   // hours (Calibrated natural cooling time constant)
     const ALPHA20 = 0.00393;
     const R20 = 0.0221 / 1000.0;
     const K_AC = 1.090;
@@ -432,20 +459,17 @@
     }
 
     function calculateModel(tamb, target, rampHours) {
-      // 1. Steady State Holding Current
+      // 1. Steady State Holding Current: derived directly from empirical loop thermal resistance
+      const dtHold = Math.max(1.0, target - tamb);
       const racTarget = getRac(target);
-      const deltaTHold = target - tamb;
-      const powerHold = deltaTHold / R_TH_HOLD;
+      const powerHold = dtHold / R_TH_HOLD_ACTUAL;
       const iHoldA = Math.sqrt(powerHold / racTarget);
 
-      // 2. Ramp-up Boost Current: calibrated to reach 95 °C smoothly at ~4.5 - 5.0h
-      const targetAtRampEnd = 95.0 + Math.max(0, (target - 95.0) * 0.4);
-      const expFactor = 1.0 - Math.exp(-rampHours / TAU_RAMP);
-      const deltaSSReq = (targetAtRampEnd - tamb) / expFactor;
-      const tAvgRamp = (tamb + 95.0) / 2.0;
-      const racRamp = getRac(tAvgRamp);
-      const powerBoost = deltaSSReq / R_TH_RAMP;
-      const iBoostA = Math.sqrt(powerBoost / racRamp);
+      // 2. Boost Current: scaled directly from lab test baseline (Cycle 2-3: 1,830 A at Tamb 32.0 C, 5.0h)
+      const dtReq = Math.max(10.0, 95.0 - tamb);
+      const dtRef = 95.0 - BASELINE_TAMB; // 63.0 K
+      const timeFactor = Math.pow(5.0 / rampHours, 0.28);
+      const iBoostA = BASELINE_BOOST_A * Math.sqrt(dtReq / dtRef) * timeFactor;
 
       const sheathEst = tamb + (target - tamb) / 2.81;
       const cooled16h = tamb + (target - tamb) * Math.exp(-16.0 / TAU_COOL);
@@ -518,20 +542,21 @@
     function generateSimData(tamb, target, rampHours) {
       const res = calculateModel(tamb, target, rampHours);
       const pts = [];
-      const targetAtRampEnd = 95.0 + Math.max(0, (target - 95.0) * 0.4);
-      const deltaSSBoost = (targetAtRampEnd - tamb) / (1.0 - Math.exp(-rampHours / TAU_RAMP));
+      const deltaSSBoost = (95.0 - tamb) / (1.0 - Math.exp(-4.6 / TAU_RAMP));
 
       for (let t = 0; t <= 24.0; t += 0.25) {
         let tempC, currA;
         if (t <= rampHours) {
           tempC = tamb + deltaSSBoost * (1.0 - Math.exp(-t / TAU_RAMP));
+          if (tempC > target) tempC = target;
           currA = res.iBoostA;
         } else if (t <= 8.0) {
           tempC = target;
           currA = res.iHoldA;
         } else {
           const tCool = t - 8.0;
-          tempC = tamb + (target - tamb) * Math.exp(-tCool / TAU_COOL);
+          tempC = (tamb - 2.0) + (target - (tamb - 2.0)) * Math.exp(-tCool / TAU_COOL);
+          if (tempC < tamb) tempC = tamb;
           currA = 0;
         }
         pts.push({ x: t, y: Math.round(tempC * 10) / 10, current: Math.round(currA) });

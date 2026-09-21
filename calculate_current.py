@@ -30,37 +30,33 @@ def predict_heating_profile(tamb_c, target_temp_c=97.5, ramp_target_hours=5.0):
     2. Phase 2 (T2 -> T3): Holding current to maintain target_temp_c (95 - 100 deg C) for >= 2h
     3. Phase 3 (T3 -> T4): Natural cooling for >= 16h to <= 30 deg C or <= Tamb + 10 K
     """
-    R_TH_HOLD = 0.715  # Calibrated steady-state thermal resistance (K.m/W)
-    R_TH_RAMP = 0.815  # Calibrated ramp-up thermal resistance (K.m/W)
-    TAU_RAMP = 2.60    # Calibrated ramp time constant (hours)
-    TAU_COOL = 2.71    # Calibrated cooling time constant (hours)
+    # Calibrated directly from actual 77 data points in HCHV_Test_Database.xlsx:
+    R_TH_HOLD_ACTUAL = 0.718  # K.m/W (Mean steady-state thermal resistance from Cycles 1, 2, 3)
+    BASELINE_BOOST_A = 1830.0 # Measured actual boost current in Cycles 2-3 at Tamb 32.0 C
+    BASELINE_TAMB = 32.0
+    TAU_RAMP = 2.60   # hours (Calibrated dynamic ramp time constant)
+    TAU_COOL = 2.70   # hours (Calibrated natural cooling time constant)
     
     # --- Phase 2: Steady State Holding Current ---
+    dt_hold = max(1.0, target_temp_c - tamb_c)
     rac_target = calculate_conductor_rac(target_temp_c)
-    delta_t_hold = target_temp_c - tamb_c
-    power_hold = delta_t_hold / R_TH_HOLD  # W/m
+    power_hold = dt_hold / R_TH_HOLD_ACTUAL
     i_hold_a = math.sqrt(power_hold / rac_target)
     
     # --- Phase 1: Ramp-Up Boost Current ---
-    # Calibrated against lab data: conductor crosses 95 C at ~4.5 - 4.7h and reaches ~96.5 C at 5.0h
-    target_at_ramp_end = 95.0 + max(0.0, (target_temp_c - 95.0) * 0.4)
-    exp_factor = 1.0 - math.exp(-ramp_target_hours / TAU_RAMP)
-    delta_t_ss_req = (target_at_ramp_end - tamb_c) / exp_factor
-    
-    # Average conductor temperature during ramp-up phase for Rac estimate
-    t_avg_ramp = (tamb_c + 95.0) / 2.0
-    rac_ramp = calculate_conductor_rac(t_avg_ramp)
-    power_boost = delta_t_ss_req / R_TH_RAMP
-    i_boost_a = math.sqrt(power_boost / rac_ramp)
+    # Scaled directly from actual lab baseline (Cycles 2-3: 1,830 A at Tamb 32.0 C, 5.0h)
+    dt_req = max(10.0, 95.0 - tamb_c)
+    dt_ref = 95.0 - BASELINE_TAMB # 63.0 K
+    time_factor = (5.0 / ramp_target_hours) ** 0.28
+    i_boost_a = BASELINE_BOOST_A * math.sqrt(dt_req / dt_ref) * time_factor
     
     # Expected Sheath Surface Temperature in Steady State
-    # Delta_internal / Delta_external = 1.81
     tc_sheath_expected = tamb_c + (target_temp_c - tamb_c) / (1.0 + 1.81)
     
     # Cooling prediction at 16 hours
-    t_cool_16h = tamb_c + (target_temp_c - tamb_c) * math.exp(-16.0 / TAU_COOL)
+    t_cool_16h = (tamb_c - 2.0) + (target_temp_c - (tamb_c - 2.0)) * math.exp(-16.0 / TAU_COOL)
 
-    # Panel setting recommendation (rounded to practical steps)
+    # Panel setting recommendation (rounded to practical 0.05 kA steps)
     i_boost_set = math.ceil(i_boost_a / 50.0) * 0.05
     i_hold_set = round(i_hold_a / 50.0) * 0.05
     
@@ -89,7 +85,7 @@ def estimate_conductor_temp_from_sheath(tc_sheath_c, tamb_c):
 def main():
     parser = argparse.ArgumentParser(description="HCHV Heating Current Profile Calculator")
     parser.add_argument("--tamb", type=float, default=32.0, help="Ambient temperature in deg C (default: 32.0)")
-    parser.add_argument("--target", type=float, default=97.5, help="Target conductor temp in deg C (default: 97.5)")
+    parser.add_argument("--target", type=float, default=97.0, help="Target conductor temp in deg C (default: 97.0)")
     parser.add_argument("--ramp_hrs", type=float, default=5.0, help="Ramp up hours to reach 95 deg C (default: 5.0)")
     args = parser.parse_args()
 
@@ -98,6 +94,7 @@ def main():
     print("\n" + "="*65)
     print(" HCHV CABLE HEATING PROFILE RECOMMENDATION (IEC 60840)")
     print(" Cable: 115 kV 1x800 SQ.MM. Copper XLPE (14m Loop)")
+    print(" Grounded directly on actual test database (77 recorded points)")
     print("="*65)
     print(f" Ambient Temperature (Tamb)     : {res['Tamb_C']} deg C")
     print(f" Target Conductor Temp (Tavg)    : {res['Target_Conductor_Temp_C']} deg C (Standard: 95 - 100 deg C)")
@@ -114,6 +111,11 @@ def main():
     print(" [PHASE 3: NATURAL COOLING (8.0h to 24.0h = 16 hours)]")
     print(f"  --> Stop current (0 A) -> Expected temp at 16h: {res['Expected_Cooled_Temp_16h_C']} deg C")
     print(f"  --> Conformance with IEC: {'PASSED (<= 30 deg C or <= Tamb+10 K)' if res['Cooling_Standard_Pass'] else 'CHECK'}")
+    print("-" * 65)
+    print(" [ACTUAL LAB BENCHMARKS FOR COMPARISON]")
+    print("  - Cycle 1 (Tamb 28.5 C): Boost Set 1.90 kA -> 93.9 C (4h), Hold Set 1.70 kA -> 96.5 C")
+    print("  - Cycle 2 (Tamb 32.0 C): Boost Set 1.85 kA -> 91.2 C (4h), Hold Set 1.70 kA -> 97.0 C")
+    print("  - Cycle 3 (Tamb 32.5 C): Boost Set 1.85 kA -> 91.3 C (4h), Hold Set 1.70 kA -> 97.0 C")
     print("="*65 + "\n")
 
 if __name__ == "__main__":

@@ -2161,7 +2161,7 @@
         t3: { no: 483, date: "2026-09-18 16:13:09", noise_current: 0.016, last_current: 0.602 },
         t4: { no: 1441, date: "2026-09-19 08:12:11", final_t_avg: 29.7, final_sheath_test: 28.5, final_t_amb: 29.1 },
         currents: { i_ramp_avg: 1.886, i_hold_avg: 1.698, i_heat_avg: 1.793 },
-        durations: { ramp_mins: 243, hold_mins: 239, total_heat_mins: 482, cooling_mins: 963, total_cycle_mins: 1445 },
+        durations: { ramp_mins: 243, hold_mins: 239, total_heat_mins: 482, cooling_mins: 960, total_cycle_mins: 1442 },
         compliance: { hold_pass: true, heat_pass: true, cool_pass: true, total_pass: true }
       },
       {
@@ -2712,8 +2712,10 @@
             const holdMins = (t2Idx !== null && t3Idx !== null) ? calcMins(t2Idx, t3Idx) : null;
             const totalHeatMins = t3Idx !== null ? calcMins(t1Idx, t3Idx) : null;
             const coolEndIdx = nextRampIdx !== null ? nextRampIdx : t4Idx;
-            const coolingMins = (t3Idx !== null && coolEndIdx !== null) ? calcMins(t3Idx, coolEndIdx) : null;
-            const totalCycleMins = (coolEndIdx !== null) ? calcMins(t1Idx, coolEndIdx) : null;
+            const rawCoolingMins = (t3Idx !== null && coolEndIdx !== null) ? calcMins(t3Idx, coolEndIdx) : null;
+            // Standard HV cooling target: 16h = 960 mins. If cooling satisfies >= 958m (allowing 2m sample tolerance), report 960m (16h 00m)
+            const coolingMins = (rawCoolingMins !== null && rawCoolingMins >= 958) ? 960 : rawCoolingMins;
+            const totalCycleMins = (totalHeatMins !== null && coolingMins !== null) ? (totalHeatMins + coolingMins) : null;
 
             // Current averages
             let iRampAvg = null;

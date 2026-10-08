@@ -23,8 +23,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-# รองรับการพิมพ์ภาษาไทยและสัญลักษณ์บน Windows Console
-if sys.stdout.encoding != 'utf-8':
+# รองรับการพิมพ์ภาษาไทยและสัญลักษณ์บน Windows Console (ป้องกัน None เมื่อคอมไพล์เป็น GUI noconsole)
+if sys.stdout is not None and getattr(sys.stdout, 'encoding', None) != 'utf-8':
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     except Exception:
@@ -659,90 +659,145 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
 
 def launch_gui(default_file="HCHV 115 kV.xlsx"):
     """
-    หน้าต่างโปรแกรมแบบกราฟิก (GUI) ที่ออกแบบให้ใช้งานง่ายมาก 
-    สำหรับผู้บริหารหรือหัวหน้างานที่ไม่รู้เรื่องการเขียนโปรแกรม
+    หน้าต่างโปรแกรมแบบกราฟิก (GUI) ฟอนต์ TH Sarabun
+    ออกแบบให้ใช้งานง่าย เรียบง่าย และสะดวกต่อการใช้งาน
+    สำหรับผู้บริหารหรือวิศวกรผู้ทดสอบ
     """
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
+    import tkinter.font as tkfont
 
     root = tk.Tk()
-    root.title("โปรแกรมวิเคราะห์ Heating Cycle Test Report (IEC 60840 / IEC 60502-2)")
-    root.geometry("820x680")
-    root.minsize(760, 600)
+    root.title("ระบบสรุปผลการทดสอบ Heating Cycle Test (IEC 60840 / IEC 60502-2)")
+    root.configure(bg="#F8FAFC")
 
-    # Style
+    # กำหนดขนาดและจัดตำแหน่งกึ่งกลางหน้าจอ
+    w, h = 880, 720
+    ws = root.winfo_screenwidth()
+    hs = root.winfo_screenheight()
+    x = max(0, (ws // 2) - (w // 2))
+    y = max(0, (hs // 2) - (h // 2) - 20)
+    root.geometry(f"{w}x{h}+{x}+{y}")
+    root.minsize(780, 620)
+
+    # ค้นหาฟอนต์ TH Sarabun
+    available_fonts = [f.lower() for f in tkfont.families()]
+    if "th sarabun new" in available_fonts:
+        f_name = "TH Sarabun New"
+    elif "th sarabunpsk" in available_fonts:
+        f_name = "TH SarabunPSK"
+    elif "th sarabun" in available_fonts:
+        f_name = "TH Sarabun"
+    else:
+        f_name = "Tahoma"
+
+    f_title = (f_name, 20, "bold")
+    f_sub = (f_name, 14, "normal")
+    f_group = (f_name, 16, "bold")
+    f_body = (f_name, 15, "normal")
+    f_bold = (f_name, 15, "bold")
+    f_btn = (f_name, 16, "bold")
+    f_status = (f_name, 14, "italic")
+    f_txt = (f_name, 15, "normal")
+
+    # ตั้งค่าสไตล์ ttk
     style = ttk.Style()
     style.theme_use('clam')
+    style.configure('.', font=f_body, background="#F8FAFC")
+    style.configure('TLabelframe', background="#FFFFFF")
+    style.configure('TLabelframe.Label', font=f_group, foreground="#1E3A8A", background="#FFFFFF")
+    style.configure('TRadiobutton', font=f_body, background="#FFFFFF")
+    style.configure('TEntry', font=f_body)
 
-    # Header Banner
-    header_frame = tk.Frame(root, bg="#1E3A8A", height=60)
+    # 1. Header Banner
+    header_frame = tk.Frame(root, bg="#1E3A8A", height=75)
     header_frame.pack(fill="x")
+    
     title_lbl = tk.Label(
         header_frame, 
-        text="โปรแกรมตรวจจับและสรุปผล Heating Cycle Voltage Test", 
-        font=("Segoe UI", 14, "bold"), 
+        text="โปรแกรมสรุปผลการทดสอบ Heating Cycle Voltage Test", 
+        font=f_title, 
         bg="#1E3A8A", 
         fg="white"
     )
-    title_lbl.pack(pady=6)
+    title_lbl.pack(pady=(8, 2))
+    
     sub_lbl = tk.Label(
         header_frame, 
-        text="รองรับสายไฟฟ้าแรงสูง (HV 24h) และแรงดันปานกลาง (MV) &middot; เพิ่มชีตสรุปใน Excel อัตโนมัติ", 
-        font=("Segoe UI", 9), 
+        text="ระบบวิเคราะห์จุดเวลา T1, T2, T3, T4 และแทรกหน้าชีต Cycle_Summary ใน Excel อัตโนมัติ", 
+        font=f_sub, 
         bg="#1E3A8A", 
-        fg="#93C5FD"
+        fg="#BFDBFE"
     )
-    sub_lbl.pack(pady=0)
+    sub_lbl.pack(pady=(0, 8))
 
-    content_frame = tk.Frame(root, padx=16, pady=12)
+    content_frame = tk.Frame(root, padx=18, pady=10, bg="#F8FAFC")
     content_frame.pack(fill="both", expand=True)
 
-    # Section 1: File Selection
-    file_group = ttk.LabelFrame(content_frame, text=" 1. เลือกไฟล์รายงานการทดสอบ (Excel Report) ", padding=10)
-    file_group.pack(fill="x", pady=6)
+    # 2. Section 1: File Selection
+    file_group = ttk.LabelFrame(content_frame, text=" 1. เลือกไฟล์รายงานการทดสอบ (Excel Report) ", padding=12)
+    file_group.pack(fill="x", pady=5)
 
-    file_var = tk.StringVar(value=default_file if os.path.exists(default_file) else "")
+    # ตรวจสอบไฟล์เริ่มต้น
+    init_path = ""
+    if os.path.exists(default_file):
+        init_path = os.path.abspath(default_file)
+    elif os.path.exists("HCHV 115 kV.xlsx"):
+        init_path = os.path.abspath("HCHV 115 kV.xlsx")
+
+    file_var = tk.StringVar(value=init_path)
     
-    file_entry = ttk.Entry(file_group, textvariable=file_var, font=("Segoe UI", 10))
-    file_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+    file_entry = tk.Entry(file_group, textvariable=file_var, font=f_body, bg="white", relief="solid", bd=1)
+    file_entry.pack(side="left", fill="x", expand=True, padx=(0, 10), ipady=4)
 
     def browse_file():
         fn = filedialog.askopenfilename(
-            title="เลือกไฟล์รายงาน Excel",
+            title="เลือกไฟล์รายงานการทดสอบ Excel",
             filetypes=[("Excel Files", "*.xlsx *.xls")]
         )
         if fn:
-            file_var.set(fn)
+            file_var.set(os.path.abspath(fn))
 
-    browse_btn = ttk.Button(file_group, text="เลือกไฟล์...", command=browse_file)
+    browse_btn = tk.Button(
+        file_group, 
+        text="เลือกไฟล์...", 
+        font=f_bold, 
+        bg="#E2E8F0", 
+        fg="#0F172A", 
+        relief="raised", 
+        cursor="hand2", 
+        padx=14, 
+        pady=3,
+        command=browse_file
+    )
     browse_btn.pack(side="right")
 
-    # Section 2: Standard Selection
-    std_group = ttk.LabelFrame(content_frame, text=" 2. มาตรฐานการทดสอบ (Test Standard) ", padding=10)
-    std_group.pack(fill="x", pady=6)
+    # 3. Section 2: Standard Selection
+    std_group = ttk.LabelFrame(content_frame, text=" 2. มาตรฐานการทดสอบ (Standard) ", padding=10)
+    std_group.pack(fill="x", pady=5)
 
     std_var = tk.StringVar(value="auto")
-    r1 = ttk.Radiobutton(std_group, text="ตรวจจับอัตโนมัติ (Auto-detect จากค่าแรงดันทดสอบในไฟล์)", variable=std_var, value="auto")
-    r2 = ttk.Radiobutton(std_group, text="สายไฟฟ้าแรงสูง HV (IEC 60840 / 62067: รอบละ 24 ชม. - ร้อน 8 ชม. / เย็น 16 ชม.)", variable=std_var, value="hv")
-    r3 = ttk.Radiobutton(std_group, text="สายไฟฟ้าแรงดันปานกลาง MV (IEC 60502-2: ร้อน 8 ชม. / ปล่อยเย็นตามธรรมชาติ)", variable=std_var, value="mv")
+    r1 = ttk.Radiobutton(std_group, text="ตรวจจับอัตโนมัติ (Auto-detect จากค่าแรงดัน U test ในไฟล์)", variable=std_var, value="auto")
+    r2 = ttk.Radiobutton(std_group, text="สายไฟฟ้าแรงสูง HV (IEC 60840 / 62067: รอบละ 24 ชม. - ร้อน 8 ชม. / ระบาย 16 ชม.)", variable=std_var, value="hv")
+    r3 = ttk.Radiobutton(std_group, text="สายไฟฟ้าแรงดันปานกลาง MV (IEC 60502-2: ร้อน 8 ชม. / ระบายความร้อนตามธรรมชาติ)", variable=std_var, value="mv")
     r1.pack(anchor="w", pady=2)
     r2.pack(anchor="w", pady=2)
     r3.pack(anchor="w", pady=2)
 
-    # Section 3: Action Buttons
-    action_frame = tk.Frame(content_frame)
+    # 4. Section 3: Action Buttons & Status
+    action_frame = tk.Frame(content_frame, bg="#F8FAFC")
     action_frame.pack(fill="x", pady=8)
 
-    status_var = tk.StringVar(value="พร้อมประมวลผล กรุณากดปุ่ม 'เริ่มประมวลผล'")
+    status_var = tk.StringVar(value="พร้อมประมวลผล กรุณากดปุ่ม '[ เริ่มประมวลผล ]' ด้านล่าง")
 
     def process_data():
         fp = file_var.get().strip().strip('"').strip("'")
         if not fp or not os.path.exists(fp):
-            messagebox.showerror("ข้อผิดพลาด", f"ไม่พบไฟล์: {fp}\nกรุณาเลือกไฟล์ Excel ที่ถูกต้อง")
+            messagebox.showerror("ข้อผิดพลาด", f"ไม่พบไฟล์: {fp}\nกรุณาเลือกไฟล์ Excel ที่ต้องการวิเคราะห์")
             return
 
         try:
-            status_var.set("กำลังอ่านไฟล์และวิเคราะห์ข้อมูล...")
+            status_var.set("กำลังอ่านไฟล์และคำนวณข้อมูลรอบการทดสอบ...")
             root.update_idletasks()
 
             records = load_test_records(fp)
@@ -762,54 +817,58 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
             elapsed_rem_hrs = int((total_elapsed_mins % 1440) // 60)
             elapsed_rem_mins = int(total_elapsed_mins % 60)
 
-            result_txt.insert("end", f"======================================================================\n")
-            result_txt.insert("end", f" สรุปผลการวิเคราะห์ Heating Cycle Test Report\n")
-            result_txt.insert("end", f"======================================================================\n\n")
-            result_txt.insert("end", f"• มาตรฐาน: {std_cfg['standard_name']}\n")
-            result_txt.insert("end", f"• เริ่มการทดสอบ: {first_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            result_txt.insert("end", f"• บันทึกล่าสุด: {last_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            result_txt.insert("end", f"• ทดสอบไปแล้วทั้งหมด: {total_elapsed_mins/60.0:.1f} ชม. ({elapsed_days} วัน {elapsed_rem_hrs} ชม. {elapsed_rem_mins} นาที)\n")
-            result_txt.insert("end", f"• ตรวจพบ: ทั้งหมด {len(cycles)} รอบ (เสร็จสมบูรณ์ {len([c for c in cycles if c['status']=='Completed'])} รอบ)\n\n")
-            result_txt.insert("end", f"เพิ่มหน้าชีต 'Cycle_Summary' ลงในไฟล์ Excel เรียบร้อยแล้ว (แสดงครบ 20 รอบ)\n\n")
+            result_txt.insert("end", "=" * 70 + "\n")
+            result_txt.insert("end", " สรุปผลการวิเคราะห์ Heating Cycle Test Report\n")
+            result_txt.insert("end", "=" * 70 + "\n\n")
+            result_txt.insert("end", f"• ไฟล์ข้อมูล: {os.path.basename(fp)}\n")
+            result_txt.insert("end", f"• มาตรฐานที่ใช้: {std_cfg['standard_name']}\n")
+            result_txt.insert("end", f"• เริ่มการทดสอบเมื่อ: {first_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            result_txt.insert("end", f"• ข้อมูลบันทึกล่าสุด: {last_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            result_txt.insert("end", f"• ระยะเวลาทดสอบสะสม: {total_elapsed_mins/60.0:.1f} ชม. ({elapsed_days} วัน {elapsed_rem_hrs} ชม. {elapsed_rem_mins} นาที)\n")
+            result_txt.insert("end", f"• ตรวจพบข้อมูลรอบ: ทั้งหมด {len(cycles)} รอบ (เสร็จสมบูรณ์ {len([c for c in cycles if c['status']=='Completed'])} รอบ)\n\n")
+            result_txt.insert("end", f"เพิ่มหน้าชีต 'Cycle_Summary' เป็นหน้าแรกของไฟล์ Excel เรียบร้อยแล้ว (รายงานครบ 20 รอบ)\n\n")
 
             for c in cycles:
                 c_num = c['cycle_num']
                 st = "เสร็จสมบูรณ์" if c['status'] == 'Completed' else "กำลังทดสอบ"
-                result_txt.insert("end", f"----------------------------------------------------------------------\n")
+                result_txt.insert("end", "-" * 70 + "\n")
                 result_txt.insert("end", f"[ Cycle {c_num} : {st} ]\n")
-                result_txt.insert("end", f"----------------------------------------------------------------------\n")
+                result_txt.insert("end", "-" * 70 + "\n")
                 if c['t1']:
-                    result_txt.insert("end", f"  T1 (เริ่มกระแส) : แถวที่ {c['t1']['no']} | เวลา {c['t1']['date'].strftime('%Y-%m-%d %H:%M:%S')} (I = {c['t1']['i_test']:.3f} kA)\n")
+                    result_txt.insert("end", f"  T1 (เริ่มจ่ายกระแส) : แถวที่ {c['t1']['no']} | เวลา {c['t1']['date'].strftime('%Y-%m-%d %H:%M:%S')} (I = {c['t1']['i_test']:.3f} kA)\n")
                 if c['t2']:
                     t2 = c['t2']
                     ramp = format_duration(c['durations']['ramp_mins'])
-                    result_txt.insert("end", f"  T2 (ถึง 95 °C)  : แถวที่ {t2['no']} | เวลา {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (ช่วงเร่ง: {ramp})\n")
+                    result_txt.insert("end", f"  T2 (ตัวนำแตะ 95 °C): แถวที่ {t2['no']} | เวลา {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (ช่วงเร่ง: {ramp})\n")
                     i_hold_s = f"{c['currents']['i_hold_avg']:.3f} kA" if c['currents'].get('i_hold_avg') is not None else "-"
                     i_ramp_s = f"{c['currents']['i_ramp_avg']:.3f} kA" if c['currents'].get('i_ramp_avg') is not None else "-"
                     i_heat_s = f"{c['currents']['i_heat_avg']:.3f} kA" if c['currents'].get('i_heat_avg') is not None else "-"
-                    result_txt.insert("end", f"     ค่า ณ T2     : T1={t2['t1']:.1f}°C, T2={t2['t2']:.1f}°C, T3={t2['t3']:.1f}°C, Tavg={t2['t_avg']:.1f}°C\n")
-                    result_txt.insert("end", f"                   Sheath Ref={t2['tc_sheath_ref']:.1f}°C, Sheath Test={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, U test={t2['u_test']:.1f} kV\n")
-                    result_txt.insert("end", f"     กระแสเฉลี่ย  : ช่วงคงที่={i_hold_s} | ช่วงเร่ง={i_ramp_s} | ช่วงร้อนรวม={i_heat_s}\n")
+                    result_txt.insert("end", f"     อุณหภูมิ ณ T2   : T1={t2['t1']:.1f}°C, T2={t2['t2']:.1f}°C, T3={t2['t3']:.1f}°C, Tavg={t2['t_avg']:.1f}°C\n")
+                    result_txt.insert("end", f"                       Sheath Ref={t2['tc_sheath_ref']:.1f}°C, Sheath Test={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, U test={t2['u_test']:.1f} kV\n")
+                    result_txt.insert("end", f"     กระแสเฉลี่ยจริง : ช่วงคงที่={i_hold_s} | ช่วงเร่ง={i_ramp_s} | ตลอดช่วงร้อนรวม={i_heat_s}\n")
                 if c['t3']:
                     hold = format_duration(c['durations']['hold_mins'])
                     heat = format_duration(c['durations']['total_heat_mins'])
                     h_pass = "ผ่าน" if c['compliance']['hold_pass'] else "ไม่ผ่าน"
-                    result_txt.insert("end", f"  T3 (หยุดกระแส) : แถวที่ {c['t3']['no']} | เวลา {c['t3']['date'].strftime('%Y-%m-%d %H:%M:%S')} (กระแสเหลือ: {c['t3']['noise_current']:.3f} kA)\n")
-                    result_txt.insert("end", f"     ช่วงคงที่    : {hold} [เกณฑ์ >={std_cfg['hold_target_mins']//60}h : {h_pass}]\n")
-                    result_txt.insert("end", f"     ร้อนรวม      : {heat} [เกณฑ์ >={std_cfg['heat_target_mins']//60}h]\n")
+                    result_txt.insert("end", f"  T3 (หยุดจ่ายกระแส) : แถวที่ {c['t3']['no']} | เวลา {c['t3']['date'].strftime('%Y-%m-%d %H:%M:%S')} (กระแสเหลือ: {c['t3']['noise_current']:.3f} kA)\n")
+                    result_txt.insert("end", f"     ช่วงอุณหภูมิคงที่: {hold} [เกณฑ์ >={std_cfg['hold_target_mins']//60}h : {h_pass}]\n")
+                    result_txt.insert("end", f"     เวลาร้อนรวม      : {heat} [เกณฑ์ >={std_cfg['heat_target_mins']//60}h]\n")
                 if c['t4']:
                     cool = format_duration(c['durations']['cooling_mins'])
                     tot = format_duration(c['durations']['total_cycle_mins'])
-                    result_txt.insert("end", f"  T4 (สิ้นสุดระบาย): แถวที่ {c['t4']['no']} | เวลา {c['t4']['date'].strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    result_txt.insert("end", f"     เวลาระบาย    : {cool}\n")
-                    result_txt.insert("end", f"     เวลารวม 1 รอบ: {tot}\n\n")
+                    result_txt.insert("end", f"  T4 (สิ้นสุดระบาย)  : แถวที่ {c['t4']['no']} | เวลา {c['t4']['date'].strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    result_txt.insert("end", f"     เวลาระบาย        : {cool}\n")
+                    result_txt.insert("end", f"     เวลารวม 1 Cycle  : {tot}\n\n")
 
-            status_var.set("ประมวลผลและเพิ่มชีต Cycle_Summary ในไฟล์ Excel สำเร็จเรียบร้อย!")
-            messagebox.showinfo("สำเร็จ", f"วิเคราะห์ข้อมูลสำเร็จ!\nเพิ่มชีต 'Cycle_Summary' ลงในไฟล์:\n{fp}\nเรียบร้อยแล้ว")
+            status_var.set("ประมวลผลสำเร็จและเพิ่มชีต Cycle_Summary ในไฟล์ Excel เรียบร้อยแล้ว")
+            messagebox.showinfo(
+                "สำเร็จ", 
+                f"วิเคราะห์ข้อมูลสำเร็จ!\n\nเพิ่มชีต 'Cycle_Summary' ลงในไฟล์:\n{os.path.basename(fp)}\nเรียบร้อยแล้วครับ"
+            )
 
         except Exception as e:
             status_var.set("เกิดข้อผิดพลาดในการประมวลผล")
-            messagebox.showerror("ข้อผิดพลาด", f"เกิดข้อผิดพลาด:\n{str(e)}")
+            messagebox.showerror("ข้อผิดพลาด", f"เกิดข้อผิดพลาดในการประมวลผล:\n{str(e)}")
 
     def open_excel():
         fp = file_var.get().strip().strip('"').strip("'")
@@ -819,16 +878,18 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
             except Exception as e:
                 messagebox.showerror("เปิดไฟล์ไม่สำเร็จ", str(e))
         else:
-            messagebox.showwarning("แจ้งเตือน", "ไม่พบไฟล์ Excel")
+            messagebox.showwarning("แจ้งเตือน", "ไม่พบไฟล์ Excel กรุณาเลือกไฟล์ก่อน")
 
     run_btn = tk.Button(
         action_frame, 
-        text="[ เริ่มประมวลผล และเพิ่ม Sheet สรุปใน Excel ]", 
-        font=("Segoe UI", 11, "bold"), 
+        text="[ เริ่มประมวลผล และแทรก Sheet สรุปใน Excel ]", 
+        font=f_btn, 
         bg="#1E3A8A", 
         fg="white", 
-        padx=14, 
-        pady=6, 
+        activebackground="#1E40AF",
+        activeforeground="white",
+        padx=18, 
+        pady=7, 
         relief="raised",
         cursor="hand2",
         command=process_data
@@ -838,30 +899,31 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     open_btn = tk.Button(
         action_frame, 
         text="เปิดดูไฟล์ Excel", 
-        font=("Segoe UI", 10), 
+        font=f_bold, 
         bg="#F1F5F9", 
         fg="#0F172A", 
-        padx=12, 
-        pady=6, 
-        cursor="hand2",
+        relief="groove", 
+        cursor="hand2", 
+        padx=14, 
+        pady=7,
         command=open_excel
     )
     open_btn.pack(side="left")
 
-    status_lbl = tk.Label(content_frame, textvariable=status_var, font=("Segoe UI", 9, "italic"), fg="#2563EB", anchor="w")
-    status_lbl.pack(fill="x", pady=2)
+    status_lbl = tk.Label(content_frame, textvariable=status_var, font=f_status, fg="#2563EB", bg="#F8FAFC", anchor="w")
+    status_lbl.pack(fill="x", pady=(4, 6))
 
-    # Section 4: Result Output View
-    out_group = ttk.LabelFrame(content_frame, text=" 3. รายงานสรุปผลการวิเคราะห์ ", padding=6)
+    # 5. Section 4: Result Output View
+    out_group = ttk.LabelFrame(content_frame, text=" 3. รายงานสรุปผลการวิเคราะห์ ", padding=8)
     out_group.pack(fill="both", expand=True, pady=4)
 
-    result_txt = tk.Text(out_group, font=("Consolas", 9), wrap="word")
+    result_txt = tk.Text(out_group, font=f_txt, wrap="word", bg="white", relief="solid", bd=1, padx=10, pady=8)
     scrollbar = ttk.Scrollbar(out_group, orient="vertical", command=result_txt.yview)
     result_txt.configure(yscrollcommand=scrollbar.set)
     scrollbar.pack(side="right", fill="y")
     result_txt.pack(side="left", fill="both", expand=True)
 
-    result_txt.insert("end", "กดปุ่ม '[ เริ่มประมวลผล และเพิ่ม Sheet สรุปใน Excel ]' เพื่อเริ่มการวิเคราะห์...\n")
+    result_txt.insert("end", "กดปุ่ม '[ เริ่มประมวลผล และแทรก Sheet สรุปใน Excel ]' เพื่อเริ่มการวิเคราะห์...\n")
 
     root.mainloop()
 

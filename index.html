@@ -8,6 +8,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- SheetJS (Local & CDN Fallback) -->
+  <script src="xlsx.full.min.js"></script>
+  <script>if (typeof XLSX === 'undefined') { document.write('<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"><\\/script>'); }</script>
   <!-- Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -73,6 +76,7 @@
         <a href="#method2-section" class="hover:text-slate-900 transition">สูตรเปลือกนอก</a>
         <a href="#time-heat-section" class="hover:text-slate-900 transition">เวลาเพิ่มอุณหภูมิ</a>
         <a href="#time-cool-section" class="hover:text-slate-900 transition">เวลาระบายความร้อน</a>
+        <a href="#report-analyzer-section" class="hover:text-blue-600 text-blue-700 font-semibold transition">วิเคราะห์ไฟล์ Report</a>
       </nav>
     </div>
   </header>
@@ -580,6 +584,199 @@
               <span class="text-[10px] text-slate-400 block mt-0.5">&le; 30°C หรือ Tamb+10</span>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 6: Report Analyzer (Milestone Detection) -->
+    <section id="report-analyzer-section" class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+              ระบบวิเคราะห์ข้อมูลจริง
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-slate-900">ตรวจจับและวิเคราะห์รอบการทดสอบจากไฟล์ Report</h2>
+          </div>
+          <p class="text-xs sm:text-sm text-slate-500 mt-1">
+            วิเคราะห์จุดเวลา T1 (เริ่มกระแส), T2 (ตัวนำถึง 95 °C), T3 (หยุดกระแส) และ T4 (สิ้นสุดระบายความร้อน) พร้อมรายงานตัวแปร ณ เวลา T2 ตาม IEC 60840
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="btnExportExcel" onclick="exportAnalysisToExcel()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 transition shadow-sm">
+            ส่งออก Excel (.xlsx)
+          </button>
+          <button type="button" id="btnExportCsv" onclick="exportAnalysisToCsv()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition border border-slate-200">
+            ส่งออก CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- File Drop & Picker Area -->
+      <div id="dropZone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-5 text-center transition bg-slate-50/50 cursor-pointer" onclick="document.getElementById('reportFileInput').click()">
+        <input type="file" id="reportFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleReportFileSelect(event)">
+        <div class="flex flex-col items-center justify-center gap-2">
+          <div class="w-10 h-10 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 font-bold text-sm">
+            XLS
+          </div>
+          <div class="text-sm font-semibold text-slate-800">
+            ลากและวางไฟล์รายงาน Excel (.xlsx) ที่นี่ หรือ
+            <span class="text-blue-600 underline font-bold ml-1">คลิกเพื่อเลือกไฟล์</span>
+          </div>
+          <p class="text-xs text-slate-500">
+            โปรแกรมจะค้นหาและประมวลผลหน้าชีต <code class="px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-mono text-[11px]">Test_Record</code> โดยอัตโนมัติ
+          </p>
+          <div id="fileStatusBadge" class="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-800">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span id="fileStatusText">โหลดข้อมูลปัจจุบัน: HCHV 115 kV.xlsx (4,530 แถว) &middot; ตรวจพบ 4 รอบ</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Standard Selector Bar -->
+      <div class="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex flex-wrap items-center gap-4">
+          <span class="font-bold text-slate-800">มาตรฐานการทดสอบ:</span>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="stdOption" value="auto" checked onchange="handleStandardChange(this.value)" class="text-blue-600">
+            <span class="text-slate-800 font-medium">ตรวจจับอัตโนมัติ (Auto-detect)</span>
+          </label>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="stdOption" value="hv" onchange="handleStandardChange(this.value)" class="text-blue-600">
+            <span class="text-slate-800 font-medium">สายไฟฟ้าแรงสูง HV: IEC 60840 / 62067 (24 ชม./รอบ)</span>
+          </label>
+          <label class="inline-flex items-center gap-1.5 cursor-pointer">
+            <input type="radio" name="stdOption" value="mv" onchange="handleStandardChange(this.value)" class="text-blue-600">
+            <span class="text-slate-800 font-medium">สายไฟฟ้าแรงดันปานกลาง MV: IEC 60502-2</span>
+          </label>
+        </div>
+        <div id="standardBadgeDesc" class="text-slate-600 font-medium text-[11px] bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+          โหมด: <strong>IEC 60840 (แรงดันสูง HV)</strong> &middot; เป้าหมาย 20 รอบ
+        </div>
+      </div>
+
+      <!-- Test Elapsed & Timeline Card -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div class="p-3.5 bg-blue-50/50 rounded-xl border border-blue-200">
+          <span class="text-slate-500 font-medium block">เริ่มการทดสอบเมื่อ (Test Start)</span>
+          <span id="overviewStartTime" class="text-sm font-mono font-bold text-slate-900 mt-1 block">2026-09-18 08:10:08</span>
+          <span class="text-[11px] text-slate-500 mt-0.5 block">บันทึกแถวแรกของไฟล์</span>
+        </div>
+        <div class="p-3.5 bg-blue-50/50 rounded-xl border border-blue-200">
+          <span class="text-slate-500 font-medium block">บันทึกล่าสุดเมื่อ (Latest Record)</span>
+          <span id="overviewEndTime" class="text-sm font-mono font-bold text-slate-900 mt-1 block">2026-09-21 11:56:17</span>
+          <span class="text-[11px] text-slate-500 mt-0.5 block">บันทึกแถวล่าสุด (No. 4530)</span>
+        </div>
+        <div class="p-3.5 bg-blue-50/50 rounded-xl border border-blue-200">
+          <span class="text-slate-500 font-medium block">รวมระยะเวลาที่ทดสอบไปแล้ว</span>
+          <span id="overviewTotalElapsed" class="text-sm sm:text-base font-mono font-bold text-blue-950 mt-1 block">75.8 ชม. (3 วัน 3 ชม. 46 นาที)</span>
+          <span class="text-[11px] text-blue-700 font-medium mt-0.5 block">กำลังทดสอบรอบที่ 4 (จากเป้าหมาย 20 รอบ)</span>
+        </div>
+      </div>
+
+      <!-- Summary KPI Metric Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+          <span class="text-xs font-medium text-slate-500 block">จำนวนรอบที่ตรวจพบ</span>
+          <span id="kpiTotalCycles" class="text-xl sm:text-2xl font-mono font-bold text-slate-900 mt-1 block">4 รอบ</span>
+          <span id="kpiCompletedCycles" class="text-[11px] text-slate-500 mt-0.5 block">เสร็จสมบูรณ์ 3 &middot; กำลังทดสอบ 1</span>
+        </div>
+        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+          <span class="text-xs font-medium text-slate-500 block">เวลาร้อนรวมเฉลี่ย (T1 &rarr; T3)</span>
+          <span id="kpiAvgHeatTime" class="text-xl sm:text-2xl font-mono font-bold text-slate-900 mt-1 block">8 ชม. 2 นาที</span>
+          <span class="text-[11px] text-emerald-700 font-medium mt-0.5 block">&ge; 8 ชม. ตามเกณฑ์</span>
+        </div>
+        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+          <span class="text-xs font-medium text-slate-500 block">เวลาคงที่เฉลี่ย &ge; 95°C (T2 &rarr; T3)</span>
+          <span id="kpiAvgHoldTime" class="text-xl sm:text-2xl font-mono font-bold text-slate-900 mt-1 block">3 ชม. 38 นาที</span>
+          <span class="text-[11px] text-emerald-700 font-medium mt-0.5 block">&ge; 2 ชม. ตามเกณฑ์</span>
+        </div>
+        <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+          <span class="text-xs font-medium text-slate-500 block">เวลาระบายเฉลี่ย (T3 &rarr; T4)</span>
+          <span id="kpiAvgCoolTime" class="text-xl sm:text-2xl font-mono font-bold text-slate-900 mt-1 block">15 ชม. 59 นาที</span>
+          <span class="text-[11px] text-slate-500 mt-0.5 block">เกณฑ์มาตรฐาน &ge; 16 ชม.</span>
+        </div>
+      </div>
+
+      <!-- Cycle-by-Cycle Milestone Cards -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-slate-800 tracking-wide uppercase">
+          รายละเอียด Milestones แต่ละรอบ (Cycle Timeline)
+        </h3>
+        <div id="cycleCardsContainer" class="space-y-4">
+          <!-- Populated by JavaScript -->
+        </div>
+      </div>
+
+      <!-- Table 1: T2 Measurement Parameters Table -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-800 tracking-wide uppercase">
+            รายงานค่าพารามิเตอร์ ณ จุดเวลา T2 (เมื่อตัวนำถึง 95 °C เป็นตัวแรก)
+          </h3>
+          <span class="text-xs text-slate-500">บันทึกค่าทุกแชนแนล ณ เวลาที่เริ่มนับช่วงคงที่</span>
+        </div>
+        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="py-2.5 px-3">Cycle</th>
+                <th class="py-2.5 px-3">แถวที่ (No)</th>
+                <th class="py-2.5 px-3">เวลา T2</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">T 1 [°C]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">T 2 [°C]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">T 3 [°C]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono bg-blue-50/50">T avg [°C]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">TC sheath ref [°c]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">TC sheath test [°c]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">T amb [°C]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono">U test [kV]</th>
+                <th class="py-2.5 px-2.5 text-right font-mono bg-amber-50/50">I heat test [kA]</th>
+              </tr>
+            </thead>
+            <tbody id="t2TableBody" class="divide-y divide-slate-100 bg-white">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Table 2: Duration & Compliance Table -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold text-slate-800 tracking-wide uppercase">
+            สรุประยะเวลาและผลการตรวจเกณฑ์มาตรฐาน (IEC 60840)
+          </h3>
+          <span class="text-xs text-slate-500">รูปแบบเวลา 'X ชม. Y นาที'</span>
+        </div>
+        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="py-2.5 px-3">รอบการทดสอบ</th>
+                <th class="py-2.5 px-3">ช่วงเร่ง (T1 &rarr; T2)</th>
+                <th class="py-2.5 px-3 font-mono">ช่วงคงที่ (T2 &rarr; T3)</th>
+                <th class="py-2.5 px-3 font-mono">เวลาร้อนรวม (T1 &rarr; T3)</th>
+                <th class="py-2.5 px-3 font-mono">เวลาระบาย (T3 &rarr; T4)</th>
+                <th class="py-2.5 px-3 font-mono">เวลารวม Cycle (T1 &rarr; T4)</th>
+                <th class="py-2.5 px-3 text-center">สถานะตามมาตรฐาน</th>
+              </tr>
+            </thead>
+            <tbody id="durationTableBody" class="divide-y divide-slate-100 bg-white">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Engineering Rules & Logic Notes -->
+      <div class="p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-600 space-y-1.5">
+        <div class="font-bold text-slate-800">เกณฑ์การตรวจจับจุดเวลาตามเงื่อนไขวิศวกรรม:</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-slate-600">
+          <div>&bull; <strong>T1 (เริ่มนับเวลาให้ความร้อน):</strong> นับเมื่อกระแสเร่งขึ้นจนถึงค่าที่ตั้งไว้ (ภายในช่วงพิกัด Setpoint)</div>
+          <div>&bull; <strong>T2 (เริ่มนับช่วงคงที่):</strong> นับเมื่ออุณหภูมิตัวนำใดตัวนำหนึ่ง (T 1, T 2 หรือ T 3) แตะระดับ &ge; 95.0 °C เป็นตัวแรก</div>
+          <div>&bull; <strong>T3 (หยุดจ่ายกระแส):</strong> ตรวจจับเมื่อกระแสจ่ายลดลงสู่ระดับสัญญาณรบกวนของเครื่องวัด (0.015 - 0.017 kA)</div>
+          <div>&bull; <strong>T4 (สิ้นสุดช่วงระบายความร้อน):</strong> นับต่อเนื่องจนถึงนาทีก่อนที่หม้อแปลงจะเริ่มเร่งกระแสสำหรับรอบถัดไป (~24 ชม.)</div>
         </div>
       </div>
     </section>
@@ -1947,12 +2144,787 @@
       });
     });
 
+    // ==========================================
+    // SECTION 6: REPORT ANALYZER JAVASCRIPT
+    // ==========================================
+
+    const initialReportCyclesData = [
+      {
+        cycle_num: 1,
+        status: "Completed",
+        t1: { no: 2, date: "2026-09-18 08:11:08", i_set: 1.90, i_test: 1.905 },
+        t2: { no: 244, date: "2026-09-18 12:14:08", t1: 93.9, t2: 95.0, t3: 94.2, t_avg: 94.4, tc_sheath_ref: 52.9, tc_sheath_test: 57.4, t_amb: 31.2, u_test: 128.4, i_test: 1.782, i_set: 1.90 },
+        t3: { no: 483, date: "2026-09-18 16:13:09", noise_current: 0.016, last_current: 0.602 },
+        t4: { no: 1441, date: "2026-09-19 08:12:11", final_t_avg: 29.7, final_sheath_test: 28.5, final_t_amb: 29.1 },
+        durations: { ramp_mins: 243, hold_mins: 239, total_heat_mins: 482, cooling_mins: 959, total_cycle_mins: 1441 },
+        compliance: { hold_pass: true, heat_pass: true, cool_pass: false, total_pass: true }
+      },
+      {
+        cycle_num: 2,
+        status: "Completed",
+        t1: { no: 1443, date: "2026-09-19 08:17:11", i_set: 1.85, i_test: 1.841 },
+        t2: { no: 1715, date: "2026-09-19 12:51:12", t1: 93.7, t2: 95.0, t3: 93.9, t_avg: 94.2, tc_sheath_ref: 54.3, tc_sheath_test: 53.1, t_amb: 33.1, u_test: 127.6, i_test: 1.822, i_set: 1.85 },
+        t3: { no: 1920, date: "2026-09-19 16:19:12", noise_current: 0.016, last_current: 0.465 },
+        t4: { no: 2878, date: "2026-09-20 08:18:14", final_t_avg: 30.1, final_sheath_test: 28.8, final_t_amb: 29.3 },
+        durations: { ramp_mins: 274, hold_mins: 208, total_heat_mins: 482, cooling_mins: 959, total_cycle_mins: 1441 },
+        compliance: { hold_pass: true, heat_pass: true, cool_pass: false, total_pass: true }
+      },
+      {
+        cycle_num: 3,
+        status: "Completed",
+        t1: { no: 2880, date: "2026-09-20 08:20:14", i_set: 1.85, i_test: 1.838 },
+        t2: { no: 3153, date: "2026-09-20 12:53:14", t1: 94.0, t2: 95.0, t3: 94.2, t_avg: 94.4, tc_sheath_ref: 54.3, tc_sheath_test: 53.0, t_amb: 33.1, u_test: 128.7, i_test: 1.836, i_set: 1.85 },
+        t3: { no: 3361, date: "2026-09-20 16:21:14", noise_current: 0.017, last_current: 1.615 },
+        t4: { no: 4316, date: "2026-09-21 08:21:17", final_t_avg: 29.5, final_sheath_test: 28.1, final_t_amb: 28.6 },
+        durations: { ramp_mins: 273, hold_mins: 208, total_heat_mins: 481, cooling_mins: 960, total_cycle_mins: 1441 },
+        compliance: { hold_pass: true, heat_pass: true, cool_pass: true, total_pass: true }
+      },
+      {
+        cycle_num: 4,
+        status: "In Progress",
+        t1: { no: 4318, date: "2026-09-21 08:23:16", i_set: 1.85, i_test: 1.840 },
+        t2: null,
+        t3: null,
+        t4: null,
+        durations: { ramp_mins: null, hold_mins: null, total_heat_mins: null, cooling_mins: null, total_cycle_mins: null },
+        compliance: { hold_pass: false, heat_pass: false, cool_pass: false, total_pass: false }
+      }
+    ];
+
+    let currentCyclesData = [...initialReportCyclesData];
+    let currentLoadedFileName = "HCHV 115 kV.xlsx";
+
+    function formatMinsThai(mins) {
+      if (mins === null || mins === undefined || isNaN(mins)) return "-";
+      mins = Math.round(mins);
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h > 0 && m > 0) return `${h} ชม. ${m} นาที`;
+      if (h > 0) return `${h} ชม.`;
+      return `${m} นาที`;
+    }
+
+    let currentStandardChoice = 'auto';
+    let currentDetectedStandard = 'HV';
+    let currentRecordsCount = 4530;
+    let currentOverviewTimes = {
+      start: "2026-09-18 08:10:08",
+      end: "2026-09-21 11:56:17",
+      totalMins: 4546
+    };
+
+    function handleStandardChange(choice) {
+      currentStandardChoice = choice;
+      updateStandardBadge();
+      renderReportAnalysis(currentCyclesData, currentLoadedFileName, currentRecordsCount);
+    }
+
+    function updateStandardBadge() {
+      const badgeDesc = document.getElementById('standardBadgeDesc');
+      if (!badgeDesc) return;
+      if (currentStandardChoice === 'mv' || (currentStandardChoice === 'auto' && currentDetectedStandard === 'MV')) {
+        badgeDesc.innerHTML = 'โหมด: <strong>IEC 60502-2 (แรงดันปานกลาง MV)</strong> &middot; เป้าหมาย 20 รอบ';
+      } else {
+        badgeDesc.innerHTML = 'โหมด: <strong>IEC 60840 (แรงดันสูง HV: 24 ชม.)</strong> &middot; เป้าหมาย 20 รอบ';
+      }
+    }
+
+    function renderReportAnalysis(cycles, fileName = "HCHV 115 kV.xlsx", totalRows = 4530) {
+      currentCyclesData = cycles;
+      currentLoadedFileName = fileName;
+      currentRecordsCount = totalRows;
+
+      // Update badge
+      const badgeText = document.getElementById('fileStatusText');
+      if (badgeText) {
+        const rowsTxt = totalRows ? ` (${totalRows.toLocaleString()} แถว)` : '';
+        badgeText.innerHTML = `โหลดข้อมูล: <strong>${fileName}</strong>${rowsTxt} &middot; ตรวจพบ ${cycles.length} รอบ`;
+      }
+
+      // Update Overview Times
+      const stEl = document.getElementById('overviewStartTime');
+      const endEl = document.getElementById('overviewEndTime');
+      const elEl = document.getElementById('overviewTotalElapsed');
+      if (stEl) stEl.textContent = currentOverviewTimes.start;
+      if (endEl) endEl.textContent = currentOverviewTimes.end;
+      if (elEl) {
+        const totalHrs = (currentOverviewTimes.totalMins / 60).toFixed(1);
+        const days = Math.floor(currentOverviewTimes.totalMins / 1440);
+        const remH = Math.floor((currentOverviewTimes.totalMins % 1440) / 60);
+        const remM = currentOverviewTimes.totalMins % 60;
+        elEl.textContent = `${totalHrs} ชม. (${days} วัน ${remH} ชม. ${remM} นาที)`;
+      }
+
+      const isMV = (currentStandardChoice === 'mv') || (currentStandardChoice === 'auto' && currentDetectedStandard === 'MV');
+      const holdTargetMins = 120; // 2h
+      const heatTargetMins = 480; // 8h
+      const coolTargetMins = isMV ? 180 : 960; // MV: >= 3h, HV: >= 16h
+
+      // KPI Metrics
+      const totalCycles = cycles.length;
+      const completedCycles = cycles.filter(c => c.status === 'Completed').length;
+      const inProgressCycles = totalCycles - completedCycles;
+
+      const completedWithHeat = cycles.filter(c => c.durations.total_heat_mins);
+      const avgHeat = completedWithHeat.length > 0 
+        ? Math.round(completedWithHeat.reduce((a, c) => a + c.durations.total_heat_mins, 0) / completedWithHeat.length)
+        : null;
+
+      const completedWithHold = cycles.filter(c => c.durations.hold_mins);
+      const avgHold = completedWithHold.length > 0
+        ? Math.round(completedWithHold.reduce((a, c) => a + c.durations.hold_mins, 0) / completedWithHold.length)
+        : null;
+
+      const completedWithCool = cycles.filter(c => c.durations.cooling_mins);
+      const avgCool = completedWithCool.length > 0
+        ? Math.round(completedWithCool.reduce((a, c) => a + c.durations.cooling_mins, 0) / completedWithCool.length)
+        : null;
+
+      document.getElementById('kpiTotalCycles').textContent = `${totalCycles} รอบ`;
+      document.getElementById('kpiCompletedCycles').textContent = `เสร็จสมบูรณ์ ${completedCycles} · กำลังทดสอบ ${inProgressCycles}`;
+      document.getElementById('kpiAvgHeatTime').textContent = formatMinsThai(avgHeat);
+      document.getElementById('kpiAvgHoldTime').textContent = formatMinsThai(avgHold);
+      document.getElementById('kpiAvgCoolTime').textContent = formatMinsThai(avgCool);
+
+      // Render Cycle Cards (สำหรับรอบที่มีข้อมูล)
+      const container = document.getElementById('cycleCardsContainer');
+      container.innerHTML = '';
+
+      cycles.forEach(c => {
+        const isDone = c.status === 'Completed';
+        const card = document.createElement('div');
+        card.className = "rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm space-y-4";
+
+        const t1 = c.t1;
+        const t2 = c.t2;
+        const t3 = c.t3;
+        const t4 = c.t4;
+
+        const holdPass = c.durations.hold_mins !== null ? c.durations.hold_mins >= holdTargetMins : false;
+        const heatPass = c.durations.total_heat_mins !== null ? c.durations.total_heat_mins >= heatTargetMins : false;
+        const coolPass = c.durations.cooling_mins !== null ? c.durations.cooling_mins >= coolTargetMins : false;
+
+        card.innerHTML = `
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+            <div class="flex items-center gap-2.5">
+              <span class="w-7 h-7 rounded-lg bg-slate-900 text-white font-mono font-bold text-xs flex items-center justify-center">
+                ${c.cycle_num}
+              </span>
+              <span class="text-sm sm:text-base font-bold text-slate-900">
+                Cycle ${c.cycle_num}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${isDone ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
+                ${isDone ? 'เสร็จสมบูรณ์' : 'กำลังดำเนินการ'}
+              </span>
+            </div>
+          </div>
+
+          <!-- Milestones 4-Stage Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <!-- T1 Card -->
+            <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-800">T1: เริ่มจ่ายกระแส</span>
+                <span class="font-mono text-[11px] text-slate-500">แถวที่ ${t1 ? t1.no : '-'}</span>
+              </div>
+              <div class="font-mono text-slate-900 font-semibold mt-1">
+                ${t1 ? t1.date : '-'}
+              </div>
+              <div class="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 flex justify-between">
+                <span>กระแสเป้าหมาย:</span>
+                <span class="font-mono font-bold text-slate-800">${t1 ? t1.i_set.toFixed(2) : '-'} kA</span>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between">
+                <span>กระแสจ่ายจริง:</span>
+                <span class="font-mono font-bold text-slate-800">${t1 ? t1.i_test.toFixed(3) : '-'} kA</span>
+              </div>
+            </div>
+
+            <!-- T2 Card -->
+            <div class="p-3 bg-blue-50/40 rounded-lg border border-blue-200/80 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-blue-900">T2: ตัวนำถึง 95 °C</span>
+                <span class="font-mono text-[11px] text-blue-700">แถวที่ ${t2 ? t2.no : '-'}</span>
+              </div>
+              <div class="font-mono text-slate-900 font-semibold mt-1">
+                ${t2 ? t2.date : '<span class="text-slate-400">ยังไม่ถึง 95 °C</span>'}
+              </div>
+              <div class="text-[11px] text-slate-600 pt-1 border-t border-blue-200/60 flex justify-between">
+                <span>ช่วงเร่ง (T1&rarr;T2):</span>
+                <span class="font-mono font-bold text-blue-900">${formatMinsThai(c.durations.ramp_mins)}</span>
+              </div>
+              <div class="text-[11px] text-slate-600 flex justify-between">
+                <span>ตัวนำเฉลี่ย Tavg:</span>
+                <span class="font-mono font-bold text-blue-900">${t2 ? t2.t_avg.toFixed(1) + ' °C' : '-'}</span>
+              </div>
+            </div>
+
+            <!-- T3 Card -->
+            <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-800">T3: หยุดจ่ายกระแส</span>
+                <span class="font-mono text-[11px] text-slate-500">แถวที่ ${t3 ? t3.no : '-'}</span>
+              </div>
+              <div class="font-mono text-slate-900 font-semibold mt-1">
+                ${t3 ? t3.date : '<span class="text-slate-400">กำลังจ่ายกระแส</span>'}
+              </div>
+              <div class="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 flex justify-between">
+                <span>คงที่ (T2&rarr;T3):</span>
+                <span class="font-mono font-bold ${holdPass ? 'text-emerald-700' : 'text-slate-800'}">
+                  ${formatMinsThai(c.durations.hold_mins)} ${t3 ? (holdPass ? '(&ge;2h)' : '(<2h)') : ''}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between">
+                <span>ร้อนรวม (T1&rarr;T3):</span>
+                <span class="font-mono font-bold ${heatPass ? 'text-emerald-700' : 'text-slate-800'}">
+                  ${formatMinsThai(c.durations.total_heat_mins)} ${t3 ? (heatPass ? '(&ge;8h)' : '(<8h)') : ''}
+                </span>
+              </div>
+            </div>
+
+            <!-- T4 Card -->
+            <div class="p-3 bg-slate-50/70 rounded-lg border border-slate-200 space-y-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-slate-800">T4: สิ้นสุดระบายความร้อน</span>
+                <span class="font-mono text-[11px] text-slate-500">แถวที่ ${t4 ? t4.no : '-'}</span>
+              </div>
+              <div class="font-mono text-slate-900 font-semibold mt-1">
+                ${t4 ? t4.date : '<span class="text-slate-400">ยังไม่สิ้นสุด</span>'}
+              </div>
+              <div class="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 flex justify-between">
+                <span>ระบาย (T3&rarr;T4):</span>
+                <span class="font-mono font-bold ${coolPass ? 'text-emerald-700' : 'text-slate-800'}">
+                  ${formatMinsThai(c.durations.cooling_mins)} ${t4 ? (coolPass ? `(&ge;${coolTargetMins//60}h)` : `(<${coolTargetMins//60}h)`) : ''}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-500 flex justify-between">
+                <span>เวลารวม 1 รอบ:</span>
+                <span class="font-mono font-bold text-slate-900">${formatMinsThai(c.durations.total_cycle_mins)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      // Render Table 1: T2 Parameters Table (แสดงครบ 20 Cycles)
+      const t2Tbody = document.getElementById('t2TableBody');
+      t2Tbody.innerHTML = '';
+      for (let cNum = 1; cNum <= 20; cNum++) {
+        const c = cycles.find(item => item.cycle_num === cNum);
+        const tr = document.createElement('tr');
+        if (c && c.t2) {
+          tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+          const t2 = c.t2;
+          tr.innerHTML = `
+            <td class="py-2 px-3 font-semibold text-slate-900">Cycle ${cNum}</td>
+            <td class="py-2 px-3 font-mono text-slate-600">${t2.no}</td>
+            <td class="py-2 px-3 font-mono text-slate-900">${t2.date}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-800">${t2.t1.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-800 font-bold">${t2.t2.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-800">${t2.t3.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono font-bold text-blue-900 bg-blue-50/50">${t2.t_avg.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-700">${t2.tc_sheath_ref.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-700">${t2.tc_sheath_test.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-700">${t2.t_amb.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono text-slate-800">${t2.u_test.toFixed(1)}</td>
+            <td class="py-2 px-2.5 text-right font-mono font-bold text-amber-900 bg-amber-50/50">${t2.i_test.toFixed(3)}</td>
+          `;
+        } else if (c) {
+          tr.className = "hover:bg-slate-50 transition border-b border-slate-100 bg-slate-50/40";
+          tr.innerHTML = `
+            <td class="py-2 px-3 font-semibold text-slate-900">Cycle ${cNum}</td>
+            <td class="py-2 px-3 font-mono text-slate-400" colspan="11">ยังไม่ถึง 95 °C (กำลังทดสอบ)</td>
+          `;
+        } else {
+          tr.className = "text-slate-400 border-b border-slate-100 bg-slate-50/20";
+          tr.innerHTML = `
+            <td class="py-1.5 px-3 font-medium text-slate-400">Cycle ${cNum}</td>
+            <td class="py-1.5 px-3 font-mono text-slate-300" colspan="11">รอการทดสอบ (Pending)</td>
+          `;
+        }
+        t2Tbody.appendChild(tr);
+      }
+
+      // Render Table 2: Durations and Compliance Table (แสดงครบ 20 Cycles)
+      const durTbody = document.getElementById('durationTableBody');
+      durTbody.innerHTML = '';
+      for (let cNum = 1; cNum <= 20; cNum++) {
+        const c = cycles.find(item => item.cycle_num === cNum);
+        const tr = document.createElement('tr');
+
+        if (c) {
+          tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+          const holdPass = c.durations.hold_mins !== null ? c.durations.hold_mins >= holdTargetMins : false;
+          const heatPass = c.durations.total_heat_mins !== null ? c.durations.total_heat_mins >= heatTargetMins : false;
+          const coolPass = c.durations.cooling_mins !== null ? c.durations.cooling_mins >= coolTargetMins : false;
+
+          const holdBadge = c.t3 
+            ? (holdPass ? '<span class="text-emerald-700 font-semibold ml-1">(ผ่าน)</span>' : '<span class="text-rose-600 font-semibold ml-1">(ไม่ผ่าน)</span>') 
+            : '';
+
+          const heatBadge = c.t3 
+            ? (heatPass ? '<span class="text-emerald-700 font-semibold ml-1">(ผ่าน)</span>' : '<span class="text-rose-600 font-semibold ml-1">(ไม่ผ่าน)</span>') 
+            : '';
+
+          const coolBadge = c.t4 
+            ? (coolPass ? '<span class="text-emerald-700 font-semibold ml-1">(ผ่าน)</span>' : `<span class="text-amber-600 font-semibold ml-1">(${formatMinsThai(c.durations.cooling_mins)})</span>`) 
+            : '';
+
+          const overallBadge = c.status === 'Completed'
+            ? (holdPass && heatPass ? '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">ผ่านเกณฑ์</span>' : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">รอปรับปรุง</span>')
+            : '<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">กำลังทดสอบ</span>';
+
+          tr.innerHTML = `
+            <td class="py-2 px-3 font-semibold text-slate-900">Cycle ${cNum}</td>
+            <td class="py-2 px-3 font-mono text-slate-800">${formatMinsThai(c.durations.ramp_mins)}</td>
+            <td class="py-2 px-3 font-mono text-slate-800">${formatMinsThai(c.durations.hold_mins)} ${holdBadge}</td>
+            <td class="py-2 px-3 font-mono text-slate-800">${formatMinsThai(c.durations.total_heat_mins)} ${heatBadge}</td>
+            <td class="py-2 px-3 font-mono text-slate-800">${formatMinsThai(c.durations.cooling_mins)} ${coolBadge}</td>
+            <td class="py-2 px-3 font-mono text-slate-800 font-bold">${formatMinsThai(c.durations.total_cycle_mins)}</td>
+            <td class="py-2 px-3 text-center">${overallBadge}</td>
+          `;
+        } else {
+          tr.className = "text-slate-400 border-b border-slate-100 bg-slate-50/20";
+          tr.innerHTML = `
+            <td class="py-1.5 px-3 font-medium text-slate-400">Cycle ${cNum}</td>
+            <td class="py-1.5 px-3 font-mono text-slate-300" colspan="5">รอการทดสอบ (Pending)</td>
+            <td class="py-1.5 px-3 text-center text-slate-400">-</td>
+          `;
+        }
+        durTbody.appendChild(tr);
+      }
+    }
+
+    // Process Excel file loaded in browser
+    function handleReportFileSelect(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      readAndProcessReportFile(file);
+    }
+
+    function readAndProcessReportFile(file) {
+      if (typeof XLSX === 'undefined') {
+        alert("กำลังโหลดไลบรารี Excel กรุณาลองใหม่อีกครั้งใน 2-3 วินาที");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+
+          // Find sheet Test_Record
+          let targetSheetName = workbook.SheetNames.find(n => n.toLowerCase().replace(/\s+/g, '_').includes('test_record'));
+          if (!targetSheetName) {
+            targetSheetName = workbook.SheetNames[0];
+          }
+
+          const worksheet = workbook.Sheets[targetSheetName];
+          const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          if (!rawRows || rawRows.length < 2) {
+            alert("ไม่พบแถวข้อมูลในชีต: " + targetSheetName);
+            return;
+          }
+
+          // Header detection
+          const headers = rawRows[0];
+          const colMap = {};
+          headers.forEach((h, idx) => {
+            if (!h) return;
+            const str = String(h).trim().toLowerCase();
+            if (str === 'no.' || str === 'no') colMap.no = idx;
+            else if (str.includes('date') || str.includes('time')) colMap.date = idx;
+            else if (str.includes('t set')) colMap.t_set = idx;
+            else if (str.includes('t avg') || str.includes('tavg')) colMap.t_avg = idx;
+            else if (str.startsWith('t 1') || str === 't1') colMap.t1 = idx;
+            else if (str.startsWith('t 2') || str === 't2') colMap.t2 = idx;
+            else if (str.startsWith('t 3') || str === 't3') colMap.t3 = idx;
+            else if (str.startsWith('t 4') || str === 't4') colMap.t4 = idx;
+            else if (str.startsWith('t 5') || str === 't5') colMap.t5 = idx;
+            else if (str.includes('sheath ref')) colMap.tc_sheath_ref = idx;
+            else if (str.includes('sheath test')) colMap.tc_sheath_test = idx;
+            else if (str.includes('amb')) colMap.t_amb = idx;
+            else if (str.includes('u test')) colMap.u_test = idx;
+            else if (str.includes('i heat setpoint') || str.includes('setpoint')) colMap.i_set = idx;
+            else if (str.includes('i heat test')) colMap.i_test = idx;
+          });
+
+          // Fallback positions
+          if (colMap.no === undefined) colMap.no = 0;
+          if (colMap.date === undefined) colMap.date = 1;
+          if (colMap.t_set === undefined) colMap.t_set = 2;
+          if (colMap.t_avg === undefined) colMap.t_avg = 3;
+          if (colMap.t1 === undefined) colMap.t1 = 4;
+          if (colMap.t2 === undefined) colMap.t2 = 5;
+          if (colMap.t3 === undefined) colMap.t3 = 6;
+          if (colMap.tc_sheath_ref === undefined) colMap.tc_sheath_ref = 9;
+          if (colMap.tc_sheath_test === undefined) colMap.tc_sheath_test = 10;
+          if (colMap.t_amb === undefined) colMap.t_amb = 11;
+          if (colMap.u_test === undefined) colMap.u_test = 12;
+          if (colMap.i_set === undefined) colMap.i_set = 13;
+          if (colMap.i_test === undefined) colMap.i_test = 14;
+
+          // Parse records
+          const records = [];
+          for (let r = 1; r < rawRows.length; r++) {
+            const row = rawRows[r];
+            if (!row || row[colMap.no] === undefined || row[colMap.no] === null) continue;
+
+            let dt = row[colMap.date];
+            let dtStr = "";
+            let dtObj = null;
+            if (dt instanceof Date) {
+              dtObj = dt;
+              dtStr = dt.toISOString().replace('T', ' ').substring(0, 19);
+            } else if (typeof dt === 'string') {
+              dtStr = dt.trim();
+              dtObj = new Date(dtStr.replace(/-/g, '/'));
+            }
+
+            const getNum = (cIdx, dVal = 0) => {
+              const val = row[cIdx];
+              const parsed = parseFloat(val);
+              return isNaN(parsed) ? dVal : parsed;
+            };
+
+            records.push({
+              no: parseInt(row[colMap.no]) || r,
+              date: dtStr,
+              dateObj: dtObj,
+              t_set: getNum(colMap.t_set),
+              t_avg: getNum(colMap.t_avg),
+              t1: getNum(colMap.t1),
+              t2: getNum(colMap.t2),
+              t3: getNum(colMap.t3),
+              tc_sheath_ref: getNum(colMap.tc_sheath_ref),
+              tc_sheath_test: getNum(colMap.tc_sheath_test),
+              t_amb: getNum(colMap.t_amb),
+              u_test: getNum(colMap.u_test),
+              i_set: getNum(colMap.i_set),
+              i_test: getNum(colMap.i_test)
+            });
+          }
+
+          // Cycle detection algorithm
+          const detectedCycles = [];
+          let i = 0;
+          let cycleNum = 1;
+
+          while (i < records.length) {
+            while (i < records.length && records[i].i_test < 0.5) i++;
+            if (i >= records.length) break;
+
+            // T1
+            let t1Idx = i;
+            while (t1Idx < records.length && records[t1Idx].i_test < (records[t1Idx].i_set - 0.05)) {
+              t1Idx++;
+            }
+            if (t1Idx >= records.length) t1Idx = i;
+
+            // T2
+            let t2Idx = null;
+            let currIdx = t1Idx;
+            while (currIdx < records.length && records[currIdx].i_test > 0.2) {
+              const rec = records[currIdx];
+              const maxT = Math.max(rec.t1, rec.t2, rec.t3);
+              if (maxT >= 95.0 && t2Idx === null) {
+                t2Idx = currIdx;
+              }
+              currIdx++;
+            }
+
+            // T3
+            let t3Idx = null;
+            for (let k = t1Idx; k < currIdx; k++) {
+              if (records[k].i_test < 0.1) {
+                t3Idx = k;
+                break;
+              }
+            }
+            if (t3Idx === null && currIdx < records.length && records[currIdx].i_test < 0.1) {
+              t3Idx = currIdx;
+            }
+
+            // T4
+            let t4Idx = null;
+            if (t3Idx !== null) {
+              let chk = t3Idx;
+              while (chk < records.length && records[chk].i_test < 0.5) {
+                chk++;
+              }
+              t4Idx = (chk < records.length) ? chk - 1 : records.length - 1;
+            }
+
+            const calcMins = (startIdx, endIdx) => {
+              if (startIdx === null || endIdx === null || startIdx === undefined || endIdx === undefined) return null;
+              const d1 = records[startIdx].dateObj;
+              const d2 = records[endIdx].dateObj;
+              if (d1 && d2 && !isNaN(d1) && !isNaN(d2)) {
+                return Math.round((d2 - d1) / 60000);
+              }
+              return endIdx - startIdx;
+            };
+
+            const isCompleted = (t3Idx !== null && t4Idx !== null && t4Idx < records.length - 1);
+            const rampMins = t2Idx !== null ? calcMins(t1Idx, t2Idx) : null;
+            const holdMins = (t2Idx !== null && t3Idx !== null) ? calcMins(t2Idx, t3Idx) : null;
+            const totalHeatMins = t3Idx !== null ? calcMins(t1Idx, t3Idx) : null;
+            const coolingMins = (t3Idx !== null && t4Idx !== null) ? calcMins(t3Idx, t4Idx) : null;
+            const totalCycleMins = (t4Idx !== null) ? calcMins(t1Idx, t4Idx) : null;
+
+            const cObj = {
+              cycle_num: cycleNum,
+              status: isCompleted ? "Completed" : "In Progress",
+              t1: {
+                no: records[t1Idx].no,
+                date: records[t1Idx].date,
+                i_set: records[t1Idx].i_set,
+                i_test: records[t1Idx].i_test
+              },
+              t2: t2Idx !== null ? {
+                no: records[t2Idx].no,
+                date: records[t2Idx].date,
+                t1: records[t2Idx].t1,
+                t2: records[t2Idx].t2,
+                t3: records[t2Idx].t3,
+                t_avg: records[t2Idx].t_avg,
+                tc_sheath_ref: records[t2Idx].tc_sheath_ref,
+                tc_sheath_test: records[t2Idx].tc_sheath_test,
+                t_amb: records[t2Idx].t_amb,
+                u_test: records[t2Idx].u_test,
+                i_test: records[t2Idx].i_test,
+                i_set: records[t2Idx].i_set
+              } : null,
+              t3: t3Idx !== null ? {
+                no: records[t3Idx].no,
+                date: records[t3Idx].date,
+                noise_current: records[t3Idx].i_test,
+                last_current: t3Idx > 0 ? records[t3Idx - 1].i_test : records[t3Idx].i_test
+              } : null,
+              t4: t4Idx !== null && t3Idx !== null ? {
+                no: records[t4Idx].no,
+                date: records[t4Idx].date,
+                final_t_avg: records[t4Idx].t_avg,
+                final_sheath_test: records[t4Idx].tc_sheath_test,
+                final_t_amb: records[t4Idx].t_amb
+              } : null,
+              durations: {
+                ramp_mins: rampMins,
+                hold_mins: holdMins,
+                total_heat_mins: totalHeatMins,
+                cooling_mins: coolingMins,
+                total_cycle_mins: totalCycleMins
+              },
+              compliance: {
+                hold_pass: holdMins !== null ? holdMins >= 120 : false,
+                heat_pass: totalHeatMins !== null ? totalHeatMins >= 480 : false,
+                cool_pass: coolingMins !== null ? coolingMins >= 960 : false,
+                total_pass: totalCycleMins !== null ? (totalCycleMins >= 1410 && totalCycleMins <= 1470) : false
+              }
+            };
+
+            detectedCycles.push(cObj);
+            cycleNum++;
+
+            if (t4Idx !== null && t3Idx !== null) {
+              i = t4Idx + 1;
+            } else if (t3Idx !== null) {
+              i = t3Idx + 1;
+            } else {
+              i = records.length;
+            }
+          }
+
+          if (detectedCycles.length > 0) {
+            if (records.length > 0) {
+              const validU = records.filter(r => r.u_test > 1.0).map(r => r.u_test);
+              const avgU = validU.length > 0 ? (validU.reduce((a, b) => a + b, 0) / validU.length) : 0;
+              currentDetectedStandard = avgU > 36.0 ? 'HV' : 'MV';
+              updateStandardBadge();
+
+              const firstRec = records[0];
+              const lastRec = records[records.length - 1];
+              currentOverviewTimes.start = firstRec.date || "-";
+              currentOverviewTimes.end = lastRec.date || "-";
+              if (firstRec.dateObj && lastRec.dateObj && !isNaN(firstRec.dateObj) && !isNaN(lastRec.dateObj)) {
+                currentOverviewTimes.totalMins = Math.round((lastRec.dateObj - firstRec.dateObj) / 60000);
+              } else {
+                currentOverviewTimes.totalMins = records.length;
+              }
+            }
+            renderReportAnalysis(detectedCycles, file.name, records.length);
+          } else {
+            alert("ไม่พบข้อมูลรอบการทดสอบในชีต Test_Record ของไฟล์นี้");
+          }
+
+        } catch (err) {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการประมวลผลไฟล์ Excel: " + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Drag and drop event listeners
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, e => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.add('border-blue-500', 'bg-blue-50/50');
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+          dropZone.classList.remove('border-blue-500', 'bg-blue-50/50');
+        }, false);
+      });
+
+      dropZone.addEventListener('drop', e => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+          readAndProcessReportFile(files[0]);
+        }
+      }, false);
+    }
+
+    // Export Excel via SheetJS
+    function exportAnalysisToExcel() {
+      if (typeof XLSX === 'undefined') {
+        alert("ไลบรารี Excel ยังไม่พร้อมใช้งาน");
+        return;
+      }
+
+      const isMV = (currentStandardChoice === 'mv') || (currentStandardChoice === 'auto' && currentDetectedStandard === 'MV');
+      const holdTargetMins = 120;
+      const heatTargetMins = 480;
+      const coolTargetMins = isMV ? 180 : 960;
+
+      const wb = XLSX.utils.book_new();
+
+      const elapsedDays = Math.floor(currentOverviewTimes.totalMins / 1440);
+      const elapsedRemH = Math.floor((currentOverviewTimes.totalMins % 1440) / 60);
+      const elapsedRemM = currentOverviewTimes.totalMins % 60;
+      const elapsedTxt = `${(currentOverviewTimes.totalMins / 60).toFixed(1)} ชม. (${elapsedDays} วัน ${elapsedRemH} ชม. ${elapsedRemM} นาที)`;
+
+      // Sheet 1: Timeline & Durations (แสดงครบ 20 Cycles พร้อม Header)
+      const summaryRows = [
+        [`รายงานสรุปผลการทดสอบ Heating Cycle Voltage Test (${isMV ? 'MV' : 'HV'})`],
+        [""],
+        ["มาตรฐานการทดสอบ:", isMV ? "IEC 60502-2 (สายไฟฟ้าแรงดันปานกลาง MV)" : "IEC 60840 / 62067 (สายไฟฟ้าแรงสูง HV: 24 ชม.)", "", "", "", "เวลารวมที่ทดสอบไปแล้ว:", elapsedTxt],
+        ["เริ่มการทดสอบเมื่อ:", currentOverviewTimes.start, "", "", "", "จำนวนรอบเป้าหมาย:", "20 รอบ"],
+        ["บันทึกล่าสุดเมื่อ:", currentOverviewTimes.end, "", "", "", "ความคืบหน้าปัจจุบัน:", `เสร็จสมบูรณ์ ${currentCyclesData.filter(c => c.status === 'Completed').length} รอบ (ตรวจพบ ${currentCyclesData.length} รอบ)`],
+        [""],
+        ["1. ตารางสรุปเวลาและระยะเวลาแต่ละ Cycle (Cycle Milestones & Duration)"],
+        ["รอบที่ (Cycle)", "สถานะ", "เวลา T1 (เริ่มกระแส)", "เวลา T2 (ถึง 95°C)", "เวลา T3 (หยุดกระแส)", "เวลา T4 (สิ้นสุดระบาย)", "ช่วงเร่ง (T1->T2)", "ช่วงคงที่ (T2->T3)", `เกณฑ์คงที่ (>=${holdTargetMins/60}h)`, "เวลาร้อนรวม (T1->T3)", `เกณฑ์ร้อนรวม (>=${heatTargetMins/60}h)`, "เวลาระบาย (T3->T4)", `เกณฑ์ระบาย (>=${coolTargetMins/60}h)`, "เวลารวม 1 Cycle (T1->T4)"]
+      ];
+
+      for (let cNum = 1; cNum <= 20; cNum++) {
+        const c = currentCyclesData.find(item => item.cycle_num === cNum);
+        if (c) {
+          const holdPass = c.durations.hold_mins !== null ? c.durations.hold_mins >= holdTargetMins : false;
+          const heatPass = c.durations.total_heat_mins !== null ? c.durations.total_heat_mins >= heatTargetMins : false;
+          const coolPass = c.durations.cooling_mins !== null ? c.durations.cooling_mins >= coolTargetMins : false;
+
+          summaryRows.push([
+            `Cycle ${cNum}`,
+            c.status === 'Completed' ? "เสร็จสมบูรณ์" : "กำลังทดสอบ",
+            c.t1 ? c.t1.date : "-",
+            c.t2 ? c.t2.date : "-",
+            c.t3 ? c.t3.date : "-",
+            c.t4 ? c.t4.date : "-",
+            formatMinsThai(c.durations.ramp_mins),
+            formatMinsThai(c.durations.hold_mins),
+            holdPass ? "ผ่าน" : (c.t3 ? "ไม่ผ่าน" : "-"),
+            formatMinsThai(c.durations.total_heat_mins),
+            heatPass ? "ผ่าน" : (c.t3 ? "ไม่ผ่าน" : "-"),
+            formatMinsThai(c.durations.cooling_mins),
+            coolPass ? "ผ่าน" : (c.t4 ? "ไม่ผ่าน" : "-"),
+            formatMinsThai(c.durations.total_cycle_mins)
+          ]);
+        } else {
+          summaryRows.push([`Cycle ${cNum}`, "รอการทดสอบ", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
+        }
+      }
+
+      const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+      XLSX.utils.book_append_sheet(wb, ws1, "Cycle_Summary");
+
+      // Sheet 2: T2 Parameters (แสดงครบ 20 Cycles)
+      const t2Rows = [
+        ["Cycle No.", "แถวที่ (No)", "เวลา T2", "T 1 [°C]", "T 2 [°C]", "T 3 [°C]", "T avg [°C]", "TC sheath ref [°c]", "TC sheath test [°c]", "T amb [°C]", "U test [kV]", "I heat test [kA]", "I setpoint [kA]"]
+      ];
+
+      for (let cNum = 1; cNum <= 20; cNum++) {
+        const c = currentCyclesData.find(item => item.cycle_num === cNum);
+        if (c && c.t2) {
+          const t2 = c.t2;
+          t2Rows.push([
+            `Cycle ${cNum}`,
+            t2.no,
+            t2.date,
+            t2.t1,
+            t2.t2,
+            t2.t3,
+            t2.t_avg,
+            t2.tc_sheath_ref,
+            t2.tc_sheath_test,
+            t2.t_amb,
+            t2.u_test,
+            t2.i_test,
+            t2.i_set
+          ]);
+        } else if (c) {
+          t2Rows.push([`Cycle ${cNum}`, "-", "ยังไม่ถึง 95 °C", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
+        } else {
+          t2Rows.push([`Cycle ${cNum}`, "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
+        }
+      }
+
+      const ws2 = XLSX.utils.aoa_to_sheet(t2Rows);
+      XLSX.utils.book_append_sheet(wb, ws2, "T2_Parameters");
+
+      const baseName = currentLoadedFileName.replace(/\.[^/.]+$/, "");
+      XLSX.writeFile(wb, `${baseName}_cycle_summary.xlsx`);
+    }
+
+    // Export CSV
+    function exportAnalysisToCsv() {
+      let csv = "\uFEFFCycle No.,แถวที่ T2,เวลา T2,T 1 [°C],T 2 [°C],T 3 [°C],T avg [°C],TC sheath ref [°c],TC sheath test [°c],T amb [°C],U test [kV],I heat test [kA],ช่วงเร่ง,ช่วงคงที่,เวลาร้อนรวม,เวลาระบาย,เวลารวมรอบ\n";
+      currentCyclesData.forEach(c => {
+        const t2 = c.t2;
+        csv += `Cycle ${c.cycle_num},${t2 ? t2.no : '-'},${t2 ? t2.date : '-'},${t2 ? t2.t1 : '-'},${t2 ? t2.t2 : '-'},${t2 ? t2.t3 : '-'},${t2 ? t2.t_avg : '-'},${t2 ? t2.tc_sheath_ref : '-'},${t2 ? t2.tc_sheath_test : '-'},${t2 ? t2.t_amb : '-'},${t2 ? t2.u_test : '-'},${t2 ? t2.i_test : '-'},"${formatMinsThai(c.durations.ramp_mins)}","${formatMinsThai(c.durations.hold_mins)}","${formatMinsThai(c.durations.total_heat_mins)}","${formatMinsThai(c.durations.cooling_mins)}","${formatMinsThai(c.durations.total_cycle_mins)}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Cycle_Analysis_Summary.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       initChart();
       populateTable();
       updateUI();
       updateHeatingTimeUI();
       updateCoolingTimeUI();
+      renderReportAnalysis(initialReportCyclesData);
     });
 
     window.addEventListener('resize', () => {

@@ -19,6 +19,8 @@ import argparse
 import datetime
 import io
 import shutil
+import re
+import zipfile
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -329,6 +331,7 @@ def analyze_cycles(records, standard_config, progress_callback=None):
         r_t1 = records[t1_idx]
         c_info['t1'] = {
             'idx': t1_idx,
+            'row_no': r_t1['row_no'],
             'no': r_t1['no'],
             'date': r_t1['date'],
             'i_set': r_t1['i_set'],
@@ -362,6 +365,7 @@ def analyze_cycles(records, standard_config, progress_callback=None):
             c_info['durations']['ramp_mins'] = dt_ramp
             c_info['t2'] = {
                 'idx': t2_idx,
+                'row_no': r_t2['row_no'],
                 'no': r_t2['no'],
                 'date': r_t2['date'],
                 't1': r_t2['t1'],
@@ -394,6 +398,7 @@ def analyze_cycles(records, standard_config, progress_callback=None):
 
             c_info['t3'] = {
                 'idx': t3_idx,
+                'row_no': r_t3['row_no'],
                 'no': r_t3['no'],
                 'date': r_t3['date'],
                 'noise_current': r_t3['i_test'],
@@ -428,6 +433,7 @@ def analyze_cycles(records, standard_config, progress_callback=None):
 
             c_info['t4'] = {
                 'idx': t4_idx,
+                'row_no': r_t4['row_no'],
                 'no': r_t4['no'],
                 'date': r_t4['date'],
                 'cool_end_date': cool_end_dt,
@@ -449,6 +455,57 @@ def analyze_cycles(records, standard_config, progress_callback=None):
     if progress_callback:
         progress_callback(65, f"Analysis complete ({len(cycles)} cycles detected).")
     return cycles
+
+
+def clean_orphaned_query_tables(filepath):
+    """
+    Remove orphaned query tables and table references created when openpyxl
+    saves workbooks containing legacy WGMS2014 query tables. This eliminates
+    the 'We found a problem with some content... Excel was able to open the file
+    by repairing or removing the unreadable content' repair prompt.
+    """
+    temp_path = filepath + ".clean_tmp"
+    try:
+        with zipfile.ZipFile(filepath, 'r') as zin, zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                # Skip orphaned table XML files
+                if item.filename.startswith('xl/tables/table') and item.filename.endswith('.xml'):
+                    continue
+
+                buffer = zin.read(item.filename)
+
+                # Remove tableParts element from worksheet XMLs
+                if item.filename.startswith('xl/worksheets/sheet') and item.filename.endswith('.xml'):
+                    txt = buffer.decode('utf-8', errors='ignore')
+                    if '<tableParts' in txt:
+                        txt = re.sub(r'<tableParts[^>]*>.*?</tableParts>', '', txt)
+                        buffer = txt.encode('utf-8')
+
+                # Remove relationship to tables in worksheet rels
+                if item.filename.startswith('xl/worksheets/_rels/sheet') and item.filename.endswith('.xml.rels'):
+                    txt = buffer.decode('utf-8', errors='ignore')
+                    if 'tables/table' in txt:
+                        txt = re.sub(r'<Relationship[^>]*Target=[\'"][^\'"]*tables/table[^\'"]*[\'"][^>]*/>', '', txt)
+                        buffer = txt.encode('utf-8')
+
+                # Remove table overrides in [Content_Types].xml
+                if item.filename == '[Content_Types].xml':
+                    txt = buffer.decode('utf-8', errors='ignore')
+                    if 'tables/table' in txt or 'table+xml' in txt:
+                        txt = re.sub(r'<Override[^>]*PartName=[\'"]/xl/tables/table[^\'"]*[\'"][^>]*/>', '', txt)
+                        txt = re.sub(r'<Override[^>]*ContentType=[\'"]application/vnd\.openxmlformats-officedocument\.spreadsheetml\.table\+xml[\'"][^>]*/>', '', txt)
+                        buffer = txt.encode('utf-8')
+
+                zout.writestr(item, buffer)
+
+        os.replace(temp_path, filepath)
+    except Exception as e:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+        raise e
 
 
 def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=True, progress_callback=None):
@@ -473,6 +530,12 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
 
     ws = wb.create_sheet(title=sheet_title, index=0)
 
+    record_sheet_name = "Test_Record"
+    for name in wb.sheetnames:
+        if 'test_record' in name.lower().replace(' ', '_'):
+            record_sheet_name = name
+            break
+
     # การจัดรูปแบบสไตล์ (Styling)
     font_main = Font(name="Calibri", size=10)
     font_title = Font(name="Calibri", size=13, bold=True, color="FFFFFF")
@@ -480,6 +543,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
     font_tbl_header = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
     font_bold = Font(name="Calibri", size=10, bold=True)
     font_gray = Font(name="Calibri", size=9, color="64748B")
+    font_link = Font(name="Calibri", size=10, color="0000FF", underline="single")
     
     fill_title = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
     fill_tbl_header = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
@@ -628,7 +692,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
             i_heat_val = f"{t2['i_heat_avg']:.3f}" if t2.get('i_heat_avg') is not None else "-"
 
             row_vals = [
-                f"Cycle {c_num}", t2['no'], t2['date'].strftime("%Y-%m-%d %H:%M:%S"),
+                f"Cycle {c_num}", t2['row_no'], t2['date'].strftime("%Y-%m-%d %H:%M:%S"),
                 t2['t1'], t2['t2'], t2['t3'], t2['t_avg'],
                 t2['tc_sheath_ref'], t2['tc_sheath_test'],
                 t2['t_amb'], t2['u_test'],
@@ -642,7 +706,11 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
 
         for col_idx, val in enumerate(row_vals, start=1):
             cell = ws.cell(row=row_cursor, column=col_idx, value=val)
-            cell.font = font_main if (c_data and c_data['t2']) else font_gray
+            if col_idx == 2 and c_data and c_data['t2']:
+                cell.hyperlink = f"#'{record_sheet_name}'!A{t2['row_no']}"
+                cell.font = font_link
+            else:
+                cell.font = font_main if (c_data and c_data['t2']) else font_gray
             cell.border = thin_border
             cell.alignment = center_align
         row_cursor += 1
@@ -671,7 +739,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
             t4 = c_data['t4']
             cool_status = "Cooling Complete (Pass)" if c_data['compliance']['cool_pass'] else "In Progress"
             row_vals = [
-                f"Cycle {c_num}", t4['no'], t4['date'].strftime("%Y-%m-%d %H:%M:%S"),
+                f"Cycle {c_num}", t4['row_no'], t4['date'].strftime("%Y-%m-%d %H:%M:%S"),
                 t4['final_t_avg'], t4['final_sheath_test'], t4['final_t_amb'],
                 t4['delta_t'], cool_status
             ]
@@ -682,7 +750,11 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
 
         for col_idx, val in enumerate(row_vals, start=1):
             cell = ws.cell(row=row_cursor, column=col_idx, value=val)
-            cell.font = font_main if (c_data and c_data['t4']) else font_gray
+            if col_idx == 2 and c_data and c_data['t4']:
+                cell.hyperlink = f"#'{record_sheet_name}'!A{t4['row_no']}"
+                cell.font = font_link
+            else:
+                cell.font = font_main if (c_data and c_data['t4']) else font_gray
             cell.border = thin_border
             cell.alignment = center_align
         row_cursor += 1
@@ -696,6 +768,9 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
     if progress_callback:
         progress_callback(88, "Saving Excel workbook with summary sheet...")
     wb.save(filepath)
+    if progress_callback:
+        progress_callback(95, "Cleaning XML query structures for Excel compatibility...")
+    clean_orphaned_query_tables(filepath)
     if progress_callback:
         progress_callback(100, "Done! Summary sheet added successfully.")
     return filepath
@@ -933,10 +1008,26 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
                     )
 
                 root.after(0, on_done)
+            except PermissionError:
+                def on_perm_err():
+                    run_btn.config(state="normal")
+                    open_btn.config(state="normal")
+                    progress_val.set(0)
+                    progress_pct_var.set("0%")
+                    status_var.set("Permission Error: File is in use by Excel.")
+                    messagebox.showerror(
+                        "File In Use",
+                        f"Cannot save or access file:\n{os.path.basename(fp)}\n\n"
+                        "The file is currently open in Excel or another program.\n"
+                        "Please close Excel and click 'Run Analysis' again."
+                    )
+                root.after(0, on_perm_err)
             except Exception as e:
                 def on_err():
                     run_btn.config(state="normal")
                     open_btn.config(state="normal")
+                    progress_val.set(0)
+                    progress_pct_var.set("0%")
                     status_var.set(f"Error: {str(e)}")
                     messagebox.showerror("Error", f"An error occurred during analysis:\n{str(e)}")
                 root.after(0, on_err)

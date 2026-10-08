@@ -8,6 +8,9 @@ import zipfile
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Kill any existing instance if running
+subprocess.run(["taskkill", "/f", "/im", "HeatingCycleAnalyzer.exe"], capture_output=True)
+
 print("1. กำลังคอมไพล์โปรแกรมด้วย PyInstaller...")
 cmd = [
     "pyinstaller",

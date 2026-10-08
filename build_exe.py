@@ -38,30 +38,10 @@ sample_excel = os.path.join(PROJECT_DIR, "HCHV 115 kV.xlsx")
 if os.path.exists(sample_excel):
     shutil.copy2(sample_excel, release_dir)
 
-# Readme
-readme_content = """========================================================================
-โปรแกรมสรุปผลการทดสอบ Heating Cycle Voltage Test (IEC 60840 / 60502-2)
-========================================================================
-
-วิธีใช้งาน:
-1. ดับเบิลคลิกที่ไฟล์ 'HeatingCycleAnalyzer.exe' เพื่อเปิดโปรแกรมทันที
-2. กดปุ่ม 'เลือกไฟล์...' เพื่อเลือกไฟล์ Excel รายงานผลการทดสอบ (เช่น HCHV 115 kV.xlsx)
-3. เลือกมาตรฐานการทดสอบ:
-   - ตรวจจับอัตโนมัติ (Auto-detect จากค่าแรงดันทดสอบในไฟล์)
-   - สายไฟฟ้าแรงสูง HV (รอบละ 24 ชม. - ร้อน 8 ชม. / ระบาย 16 ชม.)
-   - สายไฟฟ้าแรงดันปานกลาง MV (ร้อน 8 ชม. / ระบายตามธรรมชาติ)
-4. กดปุ่ม '[ เริ่มประมวลผล และแทรก Sheet สรุปใน Excel ]'
-5. ระบบจะเพิ่มชีต 'Cycle_Summary' เข้าไปเป็นหน้าแรกของไฟล์ Excel โดยอัตโนมัติ
-   พร้อมสรุปผลเวลา, สถานะผ่าน/ไม่ผ่าน, และค่ากระแสเฉลี่ย (I hold avg, I ramp avg, I heat avg)
-6. สามารถกดปุ่ม 'เปิดดูไฟล์ Excel' เพื่อเปิดตรวจผลลัพธ์ได้ทันที
-
-หมายเหตุ:
-- โปรแกรมนี้สามารถนำไปใช้งานบนเครื่องคอมพิวเตอร์ Windows เครื่องใดก็ได้
-  โดยไม่จำเป็นต้องติดตั้ง Python หรือโปรแกรมเสริมอื่นๆ เพิ่มเติม
-========================================================================
-"""
-with open(os.path.join(release_dir, "คำแนะนำการใช้งาน.txt"), "w", encoding="utf-8") as f:
-    f.write(readme_content)
+# Copy readme / user guide
+readme_src = os.path.join(PROJECT_DIR, "คำแนะนำการใช้งาน.txt")
+if os.path.exists(readme_src):
+    shutil.copy2(readme_src, release_dir)
 
 print("3. กำลังสร้างไฟล์ ZIP สำหรับนำไปแตกไฟล์ใช้งาน...")
 zip_path = os.path.join(PROJECT_DIR, "release", "HeatingCycleAnalyzer_Portable.zip")

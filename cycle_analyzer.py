@@ -118,10 +118,13 @@ def find_column_indices(headers):
     return mapping
 
 
-def load_test_records(filepath):
+def load_test_records(filepath, progress_callback=None):
     """อ่านข้อมูลจากหน้า Test_Record ในไฟล์ Excel"""
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"ไม่พบไฟล์: {filepath}")
+
+    if progress_callback:
+        progress_callback(5, "Opening Excel file...")
 
     wb = openpyxl.load_workbook(filepath, data_only=True, read_only=True)
     
@@ -132,6 +135,9 @@ def load_test_records(filepath):
             break
     if not sheet_name:
         sheet_name = wb.sheetnames[0]
+
+    if progress_callback:
+        progress_callback(10, f"Reading data from sheet '{sheet_name}'...")
 
     ws = wb[sheet_name]
     rows_iter = ws.iter_rows(values_only=True)
@@ -145,6 +151,9 @@ def load_test_records(filepath):
 
     records = []
     for r_idx, row in enumerate(rows_iter, start=2):
+        if r_idx % 3000 == 0 and progress_callback:
+            pct = min(35, 10 + int(r_idx / 1200))
+            progress_callback(pct, f"Reading Excel records ({r_idx:,} rows loaded)...")
         if not row or row[col_map['no']] is None:
             continue
         try:
@@ -184,6 +193,8 @@ def load_test_records(filepath):
             continue
 
     wb.close()
+    if progress_callback:
+        progress_callback(35, f"Loaded {len(records):,} records.")
     return records
 
 
@@ -227,7 +238,7 @@ def detect_standard(records, standard_choice="auto"):
         }
 
 
-def analyze_cycles(records, standard_config):
+def analyze_cycles(records, standard_config, progress_callback=None):
     """
     Detect cycles:
       T1: Heating starts (current hits setpoint)
@@ -241,6 +252,10 @@ def analyze_cycles(records, standard_config):
     total_records = len(records)
 
     while i < total_records:
+        if progress_callback:
+            pct = min(65, 35 + int((cycle_num / 20.0) * 30.0))
+            progress_callback(pct, f"Analyzing test cycle {cycle_num}...")
+
         while i < total_records and records[i]['i_test'] < 0.5:
             i += 1
         if i >= total_records:
@@ -256,7 +271,7 @@ def analyze_cycles(records, standard_config):
         # T2: Conductor temperature reaches 95 °C first
         t2_idx = None
         curr_idx = t1_idx
-        while curr_idx < total_records and records[curr_idx]['i_test'] > 0.2:
+        while curr_idx < total_records and records[curr_idx]['i_test'] >= 0.3:
             rec = records[curr_idx]
             max_t = max(rec['t1'], rec['t2'], rec['t3'])
             if max_t >= 95.0 and t2_idx is None:
@@ -265,11 +280,13 @@ def analyze_cycles(records, standard_config):
 
         # T3: Current drops below 0.1 kA (noise floor)
         t3_idx = None
-        for k in range(t1_idx, curr_idx):
-            if records[k]['i_test'] < 0.1:
-                t3_idx = k
+        chk = curr_idx
+        while chk < total_records and chk < curr_idx + 15:
+            if records[chk]['i_test'] < 0.1:
+                t3_idx = chk
                 break
-        if t3_idx is None and curr_idx < total_records and records[curr_idx]['i_test'] < 0.1:
+            chk += 1
+        if t3_idx is None and curr_idx < total_records and records[curr_idx]['i_test'] < 0.3:
             t3_idx = curr_idx
 
         # T4: Cooling phase ends
@@ -419,28 +436,35 @@ def analyze_cycles(records, standard_config):
                 'final_t_amb': r_t4['t_amb'],
                 'delta_t': round(r_t4['t_avg'] - r_t4['t_amb'], 1)
             }
-            i = t4_idx + 1
+
+        cycles.append(c_info)
+        if next_ramp_idx is not None:
+            i = next_ramp_idx
         elif t3_idx is not None:
             i = t3_idx + 1
         else:
-            i = total_records
-
-        cycles.append(c_info)
+            break
         cycle_num += 1
 
+    if progress_callback:
+        progress_callback(65, f"Analysis complete ({len(cycles)} cycles detected).")
     return cycles
 
 
-def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=True):
+def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=True, progress_callback=None):
     """
     เพิ่มหน้าชีต 'Cycle_Summary' ลงในไฟล์ Excel ของผู้ใช้โดยตรง
     โดยจัดวางให้เป็นแผ่นงานแรกสุด (Index 0) เพื่อให้เปิดดูได้ทันที
     """
     if backup:
+        if progress_callback:
+            progress_callback(68, "Creating file backup...")
         backup_path = filepath.replace(".xlsx", "_backup.xlsx")
         if not os.path.exists(backup_path):
             shutil.copyfile(filepath, backup_path)
 
+    if progress_callback:
+        progress_callback(72, "Opening Excel workbook for summary...")
     wb = openpyxl.load_workbook(filepath)
 
     sheet_title = "Cycle_Summary"
@@ -669,7 +693,11 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         col_letter = get_column_letter(col[0].column)
         ws.column_dimensions[col_letter].width = max(max_len + 4, 13)
 
+    if progress_callback:
+        progress_callback(88, "Saving Excel workbook with summary sheet...")
     wb.save(filepath)
+    if progress_callback:
+        progress_callback(100, "Done! Summary sheet added successfully.")
     return filepath
 
 
@@ -680,6 +708,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     import tkinter.font as tkfont
+    import threading
 
     root = tk.Tk()
     root.title("Heating Cycle Test Analyzer (IEC 60840 / IEC 60502-2)")
@@ -795,92 +824,13 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     r2.pack(anchor="w", pady=2)
     r3.pack(anchor="w", pady=2)
 
-    # 4. Section 3: Action Buttons & Status
+    # 4. Section 3: Action Buttons & Progress Bar
     action_frame = tk.Frame(content_frame, bg="#F8FAFC")
-    action_frame.pack(fill="x", pady=8)
+    action_frame.pack(fill="x", pady=(8, 4))
 
-    status_var = tk.StringVar(value="Ready. Select an Excel report and click 'Run Analysis'.")
-
-    def process_data():
-        fp = file_var.get().strip().strip('"').strip("'")
-        if not fp or not os.path.exists(fp):
-            messagebox.showerror("Error", f"File not found:\n{fp}\nPlease select a valid Excel file.")
-            return
-
-        try:
-            status_var.set("Reading file and analyzing cycle milestones...")
-            root.update_idletasks()
-
-            records = load_test_records(fp)
-            std_cfg = detect_standard(records, std_var.get())
-            cycles = analyze_cycles(records, std_cfg)
-            
-            # Add Sheet into Excel
-            add_cycle_summary_sheet(fp, cycles, records, std_cfg, backup=True)
-
-            # Display Concise English Summary
-            result_txt.delete("1.0", "end")
-
-            first_dt = records[0]['date']
-            last_dt = records[-1]['date']
-            total_elapsed_mins = int((last_dt - first_dt).total_seconds() / 60)
-            elapsed_days = int(total_elapsed_mins // 1440)
-            elapsed_rem_hrs = int((total_elapsed_mins % 1440) // 60)
-            elapsed_rem_mins = int(total_elapsed_mins % 60)
-
-            result_txt.insert("end", "=" * 70 + "\n")
-            result_txt.insert("end", " Heating Cycle Test Summary Report\n")
-            result_txt.insert("end", "=" * 70 + "\n\n")
-            result_txt.insert("end", f"• File: {os.path.basename(fp)}\n")
-            result_txt.insert("end", f"• Standard: {std_cfg['standard_name']}\n")
-            result_txt.insert("end", f"• Start Time: {first_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            result_txt.insert("end", f"• Latest Record: {last_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            result_txt.insert("end", f"• Total Elapsed: {total_elapsed_mins/60.0:.1f} hrs ({elapsed_days}d {elapsed_rem_hrs}h {elapsed_rem_mins}m)\n")
-            result_txt.insert("end", f"• Cycles Detected: {len(cycles)} cycles ({len([c for c in cycles if c['status']=='Completed'])} Completed)\n\n")
-            result_txt.insert("end", "Sheet 'Cycle_Summary' successfully added to the Excel file.\n\n")
-
-            for c in cycles:
-                c_num = c['cycle_num']
-                st = c['status']
-                result_txt.insert("end", "-" * 70 + "\n")
-                result_txt.insert("end", f"[ Cycle {c_num} : {st} ]\n")
-                result_txt.insert("end", "-" * 70 + "\n")
-                if c['t1']:
-                    result_txt.insert("end", f"  T1 (Heat Start) : Row {c['t1']['no']} | {c['t1']['date'].strftime('%Y-%m-%d %H:%M:%S')} (I = {c['t1']['i_test']:.3f} kA)\n")
-                if c['t2']:
-                    t2 = c['t2']
-                    ramp = format_duration(c['durations']['ramp_mins'])
-                    result_txt.insert("end", f"  T2 (95°C Target): Row {t2['no']} | {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (Ramp: {ramp})\n")
-                    i_hold_s = f"{c['currents']['i_hold_avg']:.3f} kA" if c['currents'].get('i_hold_avg') is not None else "-"
-                    i_ramp_s = f"{c['currents']['i_ramp_avg']:.3f} kA" if c['currents'].get('i_ramp_avg') is not None else "-"
-                    i_heat_s = f"{c['currents']['i_heat_avg']:.3f} kA" if c['currents'].get('i_heat_avg') is not None else "-"
-                    result_txt.insert("end", f"     T2 Readings  : Tavg={t2['t_avg']:.1f}°C, Sheath={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, Utest={t2['u_test']:.1f} kV\n")
-                    result_txt.insert("end", f"     Avg Current  : Hold={i_hold_s} | Ramp={i_ramp_s} | Total Heat={i_heat_s}\n")
-                if c['t3']:
-                    hold = format_duration(c['durations']['hold_mins'])
-                    heat = format_duration(c['durations']['total_heat_mins'])
-                    h_pass = "Pass" if c['compliance']['hold_pass'] else "Fail"
-                    heat_pass = "Pass" if c['compliance']['heat_pass'] else "Fail"
-                    result_txt.insert("end", f"  T3 (Heat Stop)  : Row {c['t3']['no']} | {c['t3']['date'].strftime('%Y-%m-%d %H:%M:%S')} (Noise: {c['t3']['noise_current']:.3f} kA)\n")
-                    result_txt.insert("end", f"     Hold Time    : {hold} [Target >= {std_cfg['hold_target_mins']//60}h: {h_pass}]\n")
-                    result_txt.insert("end", f"     Heat Time    : {heat} [Target >= {std_cfg['heat_target_mins']//60}h: {heat_pass}]\n")
-                if c['t4']:
-                    cool = format_duration(c['durations']['cooling_mins'])
-                    tot = format_duration(c['durations']['total_cycle_mins'])
-                    c_pass = "Pass" if c['compliance']['cool_pass'] else "Fail"
-                    result_txt.insert("end", f"  T4 (Cool End)   : Row {c['t4']['no']} | {c['t4']['date'].strftime('%Y-%m-%d %H:%M:%S')} (Tavg = {c['t4']['final_t_avg']:.1f}°C)\n")
-                    result_txt.insert("end", f"     Cooling Time : {cool} [Target >= {std_cfg['cool_target_mins']//60}h: {c_pass}]\n")
-                    result_txt.insert("end", f"     Total Cycle  : {tot}\n\n")
-
-            status_var.set("Analysis complete. Sheet 'Cycle_Summary' created successfully.")
-            messagebox.showinfo(
-                "Success", 
-                f"Analysis completed successfully!\n\nAdded 'Cycle_Summary' sheet to:\n{os.path.basename(fp)}"
-            )
-
-        except Exception as e:
-            status_var.set("Error during analysis.")
-            messagebox.showerror("Error", f"An error occurred:\n{str(e)}")
+    progress_val = tk.DoubleVar(value=0.0)
+    progress_pct_var = tk.StringVar(value="0%")
+    status_var = tk.StringVar(value="Ready. Select an Excel report and click '[ Run Analysis & Add Summary Sheet ]'.")
 
     def open_excel():
         fp = file_var.get().strip().strip('"').strip("'")
@@ -891,6 +841,107 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
                 messagebox.showerror("Error", str(e))
         else:
             messagebox.showwarning("Warning", "Excel file not found. Please select a valid file first.")
+
+    def process_data():
+        fp = file_var.get().strip().strip('"').strip("'")
+        if not fp or not os.path.exists(fp):
+            messagebox.showerror("Error", f"File not found:\n{fp}\nPlease select a valid Excel file.")
+            return
+
+        run_btn.config(state="disabled")
+        open_btn.config(state="disabled")
+        progress_val.set(0.0)
+        progress_pct_var.set("0%")
+        status_var.set("Starting analysis...")
+
+        def on_progress(pct, msg):
+            def _update():
+                progress_val.set(pct)
+                progress_pct_var.set(f"{int(pct)}%")
+                status_var.set(f"[{int(pct)}%] {msg}")
+            root.after(0, _update)
+
+        def worker():
+            try:
+                on_progress(5, "Opening Excel file...")
+                records = load_test_records(fp, progress_callback=on_progress)
+                std_cfg = detect_standard(records, std_var.get())
+                cycles = analyze_cycles(records, std_cfg, progress_callback=on_progress)
+                add_cycle_summary_sheet(fp, cycles, records, std_cfg, backup=True, progress_callback=on_progress)
+
+                def on_done():
+                    result_txt.delete("1.0", "end")
+                    first_dt = records[0]['date']
+                    last_dt = records[-1]['date']
+                    total_elapsed_mins = int((last_dt - first_dt).total_seconds() / 60)
+                    elapsed_days = int(total_elapsed_mins // 1440)
+                    elapsed_rem_hrs = int((total_elapsed_mins % 1440) // 60)
+                    elapsed_rem_mins = int(total_elapsed_mins % 60)
+
+                    result_txt.insert("end", "=" * 70 + "\n")
+                    result_txt.insert("end", " Heating Cycle Test Summary Report\n")
+                    result_txt.insert("end", "=" * 70 + "\n\n")
+                    result_txt.insert("end", f"• File: {os.path.basename(fp)}\n")
+                    result_txt.insert("end", f"• Standard: {std_cfg['standard_name']}\n")
+                    result_txt.insert("end", f"• Start Time: {first_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    result_txt.insert("end", f"• Latest Record: {last_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    result_txt.insert("end", f"• Total Elapsed: {total_elapsed_mins/60.0:.1f} hrs ({elapsed_days}d {elapsed_rem_hrs}h {elapsed_rem_mins}m)\n")
+                    result_txt.insert("end", f"• Cycles Detected: {len(cycles)} cycles ({len([c for c in cycles if c['status']=='Completed'])} Completed)\n\n")
+                    result_txt.insert("end", "Sheet 'Cycle_Summary' successfully added to the Excel file.\n\n")
+
+                    for c in cycles:
+                        c_num = c['cycle_num']
+                        st = c['status']
+                        result_txt.insert("end", "-" * 70 + "\n")
+                        result_txt.insert("end", f"[ Cycle {c_num} : {st} ]\n")
+                        result_txt.insert("end", "-" * 70 + "\n")
+                        if c['t1']:
+                            result_txt.insert("end", f"  T1 (Heat Start) : Row {c['t1']['no']} | {c['t1']['date'].strftime('%Y-%m-%d %H:%M:%S')} (I = {c['t1']['i_test']:.3f} kA)\n")
+                        if c['t2']:
+                            t2 = c['t2']
+                            ramp = format_duration(c['durations']['ramp_mins'])
+                            result_txt.insert("end", f"  T2 (95°C Target): Row {t2['no']} | {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (Ramp: {ramp})\n")
+                            i_hold_s = f"{c['currents']['i_hold_avg']:.3f} kA" if c['currents'].get('i_hold_avg') is not None else "-"
+                            i_ramp_s = f"{c['currents']['i_ramp_avg']:.3f} kA" if c['currents'].get('i_ramp_avg') is not None else "-"
+                            i_heat_s = f"{c['currents']['i_heat_avg']:.3f} kA" if c['currents'].get('i_heat_avg') is not None else "-"
+                            result_txt.insert("end", f"     T2 Readings  : Tavg={t2['t_avg']:.1f}°C, Sheath={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, Utest={t2['u_test']:.1f} kV\n")
+                            result_txt.insert("end", f"     Avg Current  : Hold={i_hold_s} | Ramp={i_ramp_s} | Total Heat={i_heat_s}\n")
+                        if c['t3']:
+                            hold = format_duration(c['durations']['hold_mins'])
+                            heat = format_duration(c['durations']['total_heat_mins'])
+                            h_pass = "Pass" if c['compliance']['hold_pass'] else "Fail"
+                            heat_pass = "Pass" if c['compliance']['heat_pass'] else "Fail"
+                            result_txt.insert("end", f"  T3 (Heat Stop)  : Row {c['t3']['no']} | {c['t3']['date'].strftime('%Y-%m-%d %H:%M:%S')} (Noise: {c['t3']['noise_current']:.3f} kA)\n")
+                            result_txt.insert("end", f"     Hold Time    : {hold} [Target >= {std_cfg['hold_target_mins']//60}h: {h_pass}]\n")
+                            result_txt.insert("end", f"     Heat Time    : {heat} [Target >= {std_cfg['heat_target_mins']//60}h: {heat_pass}]\n")
+                        if c['t4']:
+                            cool = format_duration(c['durations']['cooling_mins'])
+                            tot = format_duration(c['durations']['total_cycle_mins'])
+                            c_pass = "Pass" if c['compliance']['cool_pass'] else "Fail"
+                            result_txt.insert("end", f"  T4 (Cool End)   : Row {c['t4']['no']} | {c['t4']['date'].strftime('%Y-%m-%d %H:%M:%S')} (Tavg = {c['t4']['final_t_avg']:.1f}°C)\n")
+                            result_txt.insert("end", f"     Cooling Time : {cool} [Target >= {std_cfg['cool_target_mins']//60}h: {c_pass}]\n")
+                            result_txt.insert("end", f"     Total Cycle  : {tot}\n\n")
+
+                    progress_val.set(100.0)
+                    progress_pct_var.set("100%")
+                    status_var.set("Analysis complete. Sheet 'Cycle_Summary' created successfully.")
+                    run_btn.config(state="normal")
+                    open_btn.config(state="normal")
+                    messagebox.showinfo(
+                        "Success", 
+                        f"Analysis completed successfully (100%)!\n\nAdded 'Cycle_Summary' sheet to:\n{os.path.basename(fp)}"
+                    )
+
+                root.after(0, on_done)
+            except Exception as e:
+                def on_err():
+                    run_btn.config(state="normal")
+                    open_btn.config(state="normal")
+                    status_var.set(f"Error: {str(e)}")
+                    messagebox.showerror("Error", f"An error occurred during analysis:\n{str(e)}")
+                root.after(0, on_err)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     run_btn = tk.Button(
         action_frame, 
@@ -922,8 +973,18 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     )
     open_btn.pack(side="left")
 
+    # Progress bar and status section
+    progress_frame = tk.Frame(content_frame, bg="#F8FAFC")
+    progress_frame.pack(fill="x", pady=(8, 2))
+
+    progress_bar = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate", variable=progress_val, maximum=100)
+    progress_bar.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+    progress_pct_lbl = tk.Label(progress_frame, textvariable=progress_pct_var, font=f_bold, bg="#F8FAFC", fg="#1E3A8A", width=5, anchor="e")
+    progress_pct_lbl.pack(side="right")
+
     status_lbl = tk.Label(content_frame, textvariable=status_var, font=f_status, fg="#2563EB", bg="#F8FAFC", anchor="w")
-    status_lbl.pack(fill="x", pady=(4, 6))
+    status_lbl.pack(fill="x", pady=(2, 6))
 
     # 5. Section 4: Result Output View
     out_group = ttk.LabelFrame(content_frame, text=" 3. Analysis Summary ", padding=8)

@@ -715,7 +715,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     
     title_lbl = tk.Label(
         header_frame, 
-        text="โปรแกรมสรุปผลการทดสอบ Heating Cycle Voltage Test", 
+        text="โปรแกรมตรวจจับและสรุปเวลาการทดสอบ Heating Cycle Test", 
         font=f_title, 
         bg="#1E3A8A", 
         fg="white"
@@ -724,7 +724,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     
     sub_lbl = tk.Label(
         header_frame, 
-        text="ระบบวิเคราะห์จุดเวลา T1, T2, T3, T4 และแทรกหน้าชีต Cycle_Summary ใน Excel อัตโนมัติ", 
+        text="ค้นหาจุดเวลา T1, T2, T3, T4 และสรุปเวลาแต่ละ Cycle จากไฟล์ผลทดสอบจริง (IEC 60840 / 60502-2)", 
         font=f_sub, 
         bg="#1E3A8A", 
         fg="#BFDBFE"
@@ -882,7 +882,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
 
     run_btn = tk.Button(
         action_frame, 
-        text="[ เริ่มประมวลผล และแทรก Sheet สรุปใน Excel ]", 
+        text="[ เริ่มตรวจหาจุดเวลา และสร้าง Sheet สรุปใน Excel ]", 
         font=f_btn, 
         bg="#1E3A8A", 
         fg="white", 

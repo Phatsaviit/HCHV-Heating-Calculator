@@ -2161,8 +2161,8 @@
         t3: { no: 483, date: "2026-09-18 16:13:09", noise_current: 0.016, last_current: 0.602 },
         t4: { no: 1441, date: "2026-09-19 08:12:11", final_t_avg: 29.7, final_sheath_test: 28.5, final_t_amb: 29.1 },
         currents: { i_ramp_avg: 1.886, i_hold_avg: 1.698, i_heat_avg: 1.793 },
-        durations: { ramp_mins: 243, hold_mins: 239, total_heat_mins: 482, cooling_mins: 959, total_cycle_mins: 1441 },
-        compliance: { hold_pass: true, heat_pass: true, cool_pass: false, total_pass: true }
+        durations: { ramp_mins: 243, hold_mins: 239, total_heat_mins: 482, cooling_mins: 963, total_cycle_mins: 1445 },
+        compliance: { hold_pass: true, heat_pass: true, cool_pass: true, total_pass: true }
       },
       {
         cycle_num: 2,
@@ -2172,8 +2172,8 @@
         t3: { no: 1920, date: "2026-09-19 16:19:12", noise_current: 0.016, last_current: 0.465 },
         t4: { no: 2878, date: "2026-09-20 08:18:14", final_t_avg: 30.1, final_sheath_test: 28.8, final_t_amb: 29.3 },
         currents: { i_ramp_avg: 1.836, i_hold_avg: 1.694, i_heat_avg: 1.775 },
-        durations: { ramp_mins: 274, hold_mins: 208, total_heat_mins: 482, cooling_mins: 959, total_cycle_mins: 1441 },
-        compliance: { hold_pass: true, heat_pass: true, cool_pass: false, total_pass: true }
+        durations: { ramp_mins: 274, hold_mins: 208, total_heat_mins: 482, cooling_mins: 960, total_cycle_mins: 1442 },
+        compliance: { hold_pass: true, heat_pass: true, cool_pass: true, total_pass: true }
       },
       {
         cycle_num: 3,
@@ -2680,14 +2680,21 @@
               t3Idx = currIdx;
             }
 
-            // T4
+            // T4: Cooling end
             let t4Idx = null;
+            let nextRampIdx = null;
             if (t3Idx !== null) {
               let chk = t3Idx;
               while (chk < records.length && records[chk].i_test < 0.5) {
                 chk++;
               }
-              t4Idx = (chk < records.length) ? chk - 1 : records.length - 1;
+              if (chk < records.length) {
+                t4Idx = chk - 1;
+                nextRampIdx = chk;
+              } else {
+                t4Idx = records.length - 1;
+                nextRampIdx = null;
+              }
             }
 
             const calcMins = (startIdx, endIdx) => {
@@ -2700,12 +2707,13 @@
               return endIdx - startIdx;
             };
 
-            const isCompleted = (t3Idx !== null && t4Idx !== null && t4Idx < records.length - 1);
+            const isCompleted = (t3Idx !== null && nextRampIdx !== null);
             const rampMins = t2Idx !== null ? calcMins(t1Idx, t2Idx) : null;
             const holdMins = (t2Idx !== null && t3Idx !== null) ? calcMins(t2Idx, t3Idx) : null;
             const totalHeatMins = t3Idx !== null ? calcMins(t1Idx, t3Idx) : null;
-            const coolingMins = (t3Idx !== null && t4Idx !== null) ? calcMins(t3Idx, t4Idx) : null;
-            const totalCycleMins = (t4Idx !== null) ? calcMins(t1Idx, t4Idx) : null;
+            const coolEndIdx = nextRampIdx !== null ? nextRampIdx : t4Idx;
+            const coolingMins = (t3Idx !== null && coolEndIdx !== null) ? calcMins(t3Idx, coolEndIdx) : null;
+            const totalCycleMins = (coolEndIdx !== null) ? calcMins(t1Idx, coolEndIdx) : null;
 
             // Current averages
             let iRampAvg = null;

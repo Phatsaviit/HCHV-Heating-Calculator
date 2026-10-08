@@ -32,17 +32,17 @@ if sys.stdout is not None and getattr(sys.stdout, 'encoding', None) != 'utf-8':
 
 
 def format_duration(minutes):
-    """แปลงจำนวนนาทีเป็นรูปแบบ 'X ชม. Y นาที'"""
+    """Format minutes to concise English 'Xh Ym' (e.g. 4h 03m)"""
     if minutes is None:
         return "-"
     hours = int(minutes // 60)
     mins = int(minutes % 60)
     if hours > 0 and mins > 0:
-        return f"{hours} ชม. {mins} นาที"
+        return f"{hours}h {mins:02d}m"
     elif hours > 0:
-        return f"{hours} ชม."
+        return f"{hours}h 00m"
     else:
-        return f"{mins} นาที"
+        return f"{mins}m"
 
 
 def parse_datetime(val):
@@ -206,22 +206,22 @@ def detect_standard(records, standard_choice="auto"):
     if mode == "HV":
         return {
             'mode': 'HV',
-            'standard_name': 'IEC 60840 / IEC 62067 (สายไฟฟ้าแรงสูง HV)',
-            'cycle_target_desc': '24 ชั่วโมง / Cycle (ร้อน >= 8 ชม., เย็น >= 16 ชม.)',
-            'hold_target_mins': 120,    # >= 2 ชม.
-            'heat_target_mins': 480,    # >= 8 ชม.
-            'cool_target_mins': 960,    # >= 16 ชม.
-            'cycle_target_mins': 1440,  # 24 ชม.
+            'standard_name': 'IEC 60840 / IEC 62067 (HV Cable, 24h Cycle)',
+            'cycle_target_desc': '24h / Cycle (Heat >= 8h, Cool >= 16h)',
+            'hold_target_mins': 120,    # >= 2h
+            'heat_target_mins': 480,    # >= 8h
+            'cool_target_mins': 960,    # >= 16h
+            'cycle_target_mins': 1440,  # 24h
             'total_target_cycles': 20
         }
     else:
         return {
             'mode': 'MV',
-            'standard_name': 'IEC 60502-2 (สายไฟฟ้าแรงดันปานกลาง MV)',
-            'cycle_target_desc': 'ร้อน >= 8 ชม. (คงที่ >= 2 ชม.), ระบายความร้อนตามธรรมชาติ',
-            'hold_target_mins': 120,    # >= 2 ชม.
-            'heat_target_mins': 480,    # >= 8 ชม.
-            'cool_target_mins': 180,    # >= 3 ชม. หรือจน Tamb+5
+            'standard_name': 'IEC 60502-2 (MV Cable)',
+            'cycle_target_desc': 'Heat >= 8h (Hold >= 2h), Natural Cool',
+            'hold_target_mins': 120,    # >= 2h
+            'heat_target_mins': 480,    # >= 8h
+            'cool_target_mins': 180,    # >= 3h
             'cycle_target_mins': None,
             'total_target_cycles': 20
         }
@@ -229,11 +229,11 @@ def detect_standard(records, standard_choice="auto"):
 
 def analyze_cycles(records, standard_config):
     """
-    วิเคราะห์แต่ละ Cycle:
-      T1: กระแสขึ้นถึง Setpoint
-      T2: อุณหภูมิตัวนำ T1, T2 หรือ T3 ถึง >= 95.0 °C เป็นตัวแรก
-      T3: กระแสตัดลงเหลือสัญญาณรบกวน (< 0.1 kA)
-      T4: สิ้นสุดช่วงระบายความร้อนก่อนขึ้นรอบถัดไป
+    Detect cycles:
+      T1: Heating starts (current hits setpoint)
+      T2: Conductor temperature reaches >= 95.0 °C first
+      T3: Heating stops (current drops to noise floor < 0.1 kA)
+      T4: Cooling ends (prior to next cycle ramp-up)
     """
     cycles = []
     i = 0
@@ -246,14 +246,14 @@ def analyze_cycles(records, standard_config):
         if i >= total_records:
             break
 
-        # T1: เริ่มนับเมื่อกระแสถึงค่าที่ตั้งไว้
+        # T1: Current reaches setpoint
         t1_idx = i
         while t1_idx < total_records and records[t1_idx]['i_test'] < (records[t1_idx]['i_set'] - 0.05):
             t1_idx += 1
         if t1_idx >= total_records:
             t1_idx = i
 
-        # T2: อุณหภูมิตัวนำถึง 95 °C เป็นตัวแรก
+        # T2: Conductor temperature reaches 95 °C first
         t2_idx = None
         curr_idx = t1_idx
         while curr_idx < total_records and records[curr_idx]['i_test'] > 0.2:
@@ -263,7 +263,7 @@ def analyze_cycles(records, standard_config):
                 t2_idx = curr_idx
             curr_idx += 1
 
-        # T3: ตัดกระแส (เหลือเฉพาะสัญญาณรบกวน 0.XXX kA)
+        # T3: Current drops below 0.1 kA (noise floor)
         t3_idx = None
         for k in range(t1_idx, curr_idx):
             if records[k]['i_test'] < 0.1:
@@ -272,20 +272,23 @@ def analyze_cycles(records, standard_config):
         if t3_idx is None and curr_idx < total_records and records[curr_idx]['i_test'] < 0.1:
             t3_idx = curr_idx
 
-        # T4: สิ้นสุดการระบายความร้อน (จนถึงรอบถัดไปเริ่มขึ้นกระแส)
+        # T4: Cooling phase ends
         t4_idx = None
+        next_ramp_idx = None
         if t3_idx is not None:
             chk = t3_idx
             while chk < total_records and records[chk]['i_test'] < 0.5:
                 chk += 1
             if chk < total_records:
                 t4_idx = chk - 1
+                next_ramp_idx = chk
             else:
                 t4_idx = total_records - 1
+                next_ramp_idx = None
 
         c_info = {
             'cycle_num': cycle_num,
-            'status': 'Completed' if (t3_idx is not None and t4_idx is not None and t4_idx < total_records - 1) else 'In Progress',
+            'status': 'Completed' if (t3_idx is not None and next_ramp_idx is not None) else 'In Progress',
             't1': None,
             't2': None,
             't3': None,
@@ -305,7 +308,7 @@ def analyze_cycles(records, standard_config):
             }
         }
 
-        # ข้อมูล T1
+        # T1 Data
         r_t1 = records[t1_idx]
         c_info['t1'] = {
             'idx': t1_idx,
@@ -315,16 +318,16 @@ def analyze_cycles(records, standard_config):
             'i_test': r_t1['i_test']
         }
 
-        # คำนวณกระแสเฉลี่ยตามช่วงเวลาจริง (Average Currents)
-        # 1. ช่วงเร่งความร้อน (T1 -> T2)
+        # Average Currents
+        # 1. Ramp: T1 -> T2
         i_ramp_slice = [records[k]['i_test'] for k in range(t1_idx, t2_idx + 1)] if t2_idx is not None else []
         i_ramp_avg = round(sum(i_ramp_slice) / len(i_ramp_slice), 3) if i_ramp_slice else None
 
-        # 2. ช่วงอุณหภูมิคงที่ (T2 -> T3)
+        # 2. Hold: T2 -> T3
         i_hold_slice = [records[k]['i_test'] for k in range(t2_idx, t3_idx)] if (t2_idx is not None and t3_idx is not None) else []
         i_hold_avg = round(sum(i_hold_slice) / len(i_hold_slice), 3) if i_hold_slice else None
 
-        # 3. ตลอดช่วงให้ความร้อนรวม (T1 -> T3 หรือถึงแถวล่าสุด)
+        # 3. Total Heat: T1 -> T3
         heat_end = t3_idx if t3_idx is not None else total_records
         i_heat_slice = [records[k]['i_test'] for k in range(t1_idx, heat_end)]
         i_heat_avg = round(sum(i_heat_slice) / len(i_heat_slice), 3) if i_heat_slice else None
@@ -335,7 +338,7 @@ def analyze_cycles(records, standard_config):
             'i_heat_avg': i_heat_avg
         }
 
-        # ข้อมูล T2
+        # T2 Data
         if t2_idx is not None:
             r_t2 = records[t2_idx]
             dt_ramp = int((r_t2['date'] - r_t1['date']).total_seconds() / 60)
@@ -359,7 +362,7 @@ def analyze_cycles(records, standard_config):
                 'i_heat_avg': i_heat_avg
             }
 
-        # ข้อมูล T3
+        # T3 Data
         if t3_idx is not None:
             r_t3 = records[t3_idx]
             r_t3_prev = records[t3_idx - 1] if t3_idx > 0 else r_t3
@@ -380,11 +383,13 @@ def analyze_cycles(records, standard_config):
                 'last_current': r_t3_prev['i_test']
             }
 
-        # ข้อมูล T4
+        # T4 Data & Cooling Duration
         if t4_idx is not None and t3_idx is not None:
             r_t4 = records[t4_idx]
-            dt_cooling = int((r_t4['date'] - records[t3_idx]['date']).total_seconds() / 60)
-            dt_total_cycle = int((r_t4['date'] - r_t1['date']).total_seconds() / 60)
+            # Cooling period extends until the next cycle heating ramp-up begins
+            cool_end_dt = records[next_ramp_idx]['date'] if next_ramp_idx is not None else r_t4['date']
+            dt_cooling = int((cool_end_dt - records[t3_idx]['date']).total_seconds() / 60)
+            dt_total_cycle = int((cool_end_dt - r_t1['date']).total_seconds() / 60)
             c_info['durations']['cooling_mins'] = dt_cooling
             c_info['durations']['total_cycle_mins'] = dt_total_cycle
             c_info['compliance']['cool_pass'] = dt_cooling >= standard_config['cool_target_mins']
@@ -398,6 +403,7 @@ def analyze_cycles(records, standard_config):
                 'idx': t4_idx,
                 'no': r_t4['no'],
                 'date': r_t4['date'],
+                'cool_end_date': cool_end_dt,
                 'final_t_avg': r_t4['t_avg'],
                 'final_sheath_test': r_t4['tc_sheath_test'],
                 'final_t_amb': r_t4['t_amb'],
@@ -459,7 +465,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
     # 1. Title Banner
     ws.merge_cells("A1:N1")
     title_cell = ws["A1"]
-    title_cell.value = f"รายงานสรุปผลการทดสอบ Heating Cycle Voltage Test ({standard_config['mode']})"
+    title_cell.value = f"Heating Cycle Voltage Test Summary Report ({standard_config['mode']})"
     title_cell.font = font_title
     title_cell.fill = fill_title
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
@@ -473,23 +479,23 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
     elapsed_days = int(total_elapsed_mins // 1440)
     elapsed_rem_hrs = int((total_elapsed_mins % 1440) // 60)
     elapsed_rem_mins = int(total_elapsed_mins % 60)
-    elapsed_str = f"{total_elapsed_hrs:.1f} ชั่วโมง ({elapsed_days} วัน {elapsed_rem_hrs} ชม. {elapsed_rem_mins} นาที)"
+    elapsed_str = f"{total_elapsed_hrs:.1f} hrs ({elapsed_days}d {elapsed_rem_hrs}h {elapsed_rem_mins}m)"
 
     completed_cycles_count = len([c for c in cycles if c['status'] == 'Completed'])
 
-    ws["A3"] = "มาตรฐานการทดสอบ:"
+    ws["A3"] = "Test Standard:"
     ws["B3"] = standard_config['standard_name']
-    ws["A4"] = "เริ่มการทดสอบเมื่อ:"
+    ws["A4"] = "Start Time:"
     ws["B4"] = first_dt.strftime("%Y-%m-%d %H:%M:%S")
-    ws["A5"] = "บันทึกล่าสุดเมื่อ:"
+    ws["A5"] = "Latest Record:"
     ws["B5"] = last_dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    ws["F3"] = "เวลารวมที่ทดสอบไปแล้ว:"
+    ws["F3"] = "Total Elapsed Time:"
     ws["G3"] = elapsed_str
-    ws["F4"] = "จำนวน Cycle ทั้งหมดตามมาตรฐาน:"
-    ws["G4"] = f"{standard_config['total_target_cycles']} รอบ"
-    ws["F5"] = "ความคืบหน้าปัจจุบัน:"
-    ws["G5"] = f"เสร็จสมบูรณ์ {completed_cycles_count} รอบ (ตรวจพบในไฟล์ {len(cycles)} รอบ)"
+    ws["F4"] = "Target Cycles:"
+    ws["G4"] = f"{standard_config['total_target_cycles']} Cycles"
+    ws["F5"] = "Current Progress:"
+    ws["G5"] = f"Completed {completed_cycles_count} cycles ({len(cycles)} detected)"
 
     for r in range(3, 6):
         ws.cell(row=r, column=1).font = font_bold
@@ -497,17 +503,17 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         ws.cell(row=r, column=6).font = font_bold
         ws.cell(row=r, column=7).font = font_main
 
-    # 3. ตารางที่ 1: สรุปเวลาและระยะเวลาแต่ละ Cycle (20 Cycles)
-    ws.cell(row=7, column=1, value="1. ตารางสรุปเวลาและระยะเวลาแต่ละ Cycle (Cycle Milestones & Duration)").font = font_subtitle
+    # 3. Table 1: Milestones & Duration Summary (20 Cycles)
+    ws.cell(row=7, column=1, value="1. Cycle Milestones & Duration Summary (20 Cycles)").font = font_subtitle
     
     headers_t1 = [
-        "รอบที่ (Cycle)", "สถานะ", 
-        "T1 เริ่มกระแส", "T2 ถึง 95°C", "T3 หยุดกระแส", "T4 สิ้นสุดระบาย",
-        "ช่วงเร่ง (T1->T2)", "ช่วงคงที่ (T2->T3)", f"เกณฑ์คงที่ (>={standard_config['hold_target_mins']//60}h)",
-        "เวลาร้อนรวม (T1->T3)", f"เกณฑ์ร้อนรวม (>={standard_config['heat_target_mins']//60}h)",
-        "เวลาระบาย (T3->T4)", f"เกณฑ์ระบาย (>={standard_config['cool_target_mins']//60}h)",
-        "เวลารวม 1 Cycle",
-        "I hold avg (ช่วงคงที่) [kA]", "I heat avg (ช่วงร้อนรวม) [kA]"
+        "Cycle", "Status", 
+        "T1 (Heat Start)", "T2 (95°C Target)", "T3 (Heat Stop)", "T4 (Cool End)",
+        "Ramp (T1->T2)", "Hold (T2->T3)", f"Hold Limit (>={standard_config['hold_target_mins']//60}h)",
+        "Total Heat (T1->T3)", f"Heat Limit (>={standard_config['heat_target_mins']//60}h)",
+        "Cooling (T3->T4)", f"Cool Limit (>={standard_config['cool_target_mins']//60}h)",
+        "Total Cycle Time",
+        "I hold avg [kA]", "I heat avg [kA]"
     ]
     
     ws.row_dimensions[8].height = 24
@@ -517,7 +523,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         cell.fill = fill_tbl_header
         cell.alignment = center_align
 
-    # ใส่ข้อมูล Cycle 1 ถึง 20
+    # Cycle 1 to 20 Rows
     row_cursor = 9
     for c_num in range(1, 21):
         c_data = next((c for c in cycles if c['cycle_num'] == c_num), None)
@@ -527,10 +533,10 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
             t3_s = c_data['t3']['date'].strftime("%Y-%m-%d %H:%M:%S") if c_data['t3'] else "-"
             t4_s = c_data['t4']['date'].strftime("%Y-%m-%d %H:%M:%S") if c_data['t4'] else "-"
 
-            status_str = "เสร็จสมบูรณ์" if c_data['status'] == 'Completed' else "กำลังทดสอบ"
-            hold_pass = "ผ่าน" if c_data['compliance']['hold_pass'] else ("-" if c_data['t3'] is None else "ไม่ผ่าน")
-            heat_pass = "ผ่าน" if c_data['compliance']['heat_pass'] else ("-" if c_data['t3'] is None else "ไม่ผ่าน")
-            cool_pass = "ผ่าน" if c_data['compliance']['cool_pass'] else ("-" if c_data['t4'] is None else "ไม่ผ่าน")
+            status_str = "Completed" if c_data['status'] == 'Completed' else "In Progress"
+            hold_pass = "Pass" if c_data['compliance']['hold_pass'] else ("-" if c_data['t3'] is None else "Fail")
+            heat_pass = "Pass" if c_data['compliance']['heat_pass'] else ("-" if c_data['t3'] is None else "Fail")
+            cool_pass = "Pass" if c_data['compliance']['cool_pass'] else ("-" if c_data['t4'] is None else "Fail")
 
             i_hold_s = f"{c_data['currents']['i_hold_avg']:.3f}" if c_data['currents'].get('i_hold_avg') is not None else "-"
             i_heat_s = f"{c_data['currents']['i_heat_avg']:.3f}" if c_data['currents'].get('i_heat_avg') is not None else "-"
@@ -546,7 +552,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
                 i_hold_s, i_heat_s
             ]
         else:
-            row_vals = [f"Cycle {c_num}", "รอการทดสอบ", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            row_vals = [f"Cycle {c_num}", "Pending", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
 
         for col_idx, val in enumerate(row_vals, start=1):
             cell = ws.cell(row=row_cursor, column=col_idx, value=val)
@@ -558,17 +564,17 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
 
         row_cursor += 1
 
-    # 4. ตารางที่ 2: ค่าพารามิเตอร์สำคัญ ณ เวลา T2 (20 Cycles)
+    # 4. Table 2: Parameters at T2 Milestone (20 Cycles)
     row_cursor += 2
-    ws.cell(row=row_cursor, column=1, value="2. ค่าพารามิเตอร์สำคัญ ณ จุดเวลา T2 (เมื่อตัวนำแตะ 95 °C เป็นตัวแรก)").font = font_subtitle
+    ws.cell(row=row_cursor, column=1, value="2. Parameters at T2 Milestone (Conductor Reaching 95°C)").font = font_subtitle
     row_cursor += 1
 
     headers_t2 = [
-        "รอบที่ (Cycle)", "แถว No.", "เวลา T2",
+        "Cycle", "Row No.", "T2 Time",
         "T 1 [°C]", "T 2 [°C]", "T 3 [°C]", "T avg [°C]",
-        "TC sheath ref [°c]", "TC sheath test [°c]",
+        "TC sheath ref [°C]", "TC sheath test [°C]",
         "T amb [°C]", "U test [kV]",
-        "I hold avg (ช่วงคงที่) [kA]", "I ramp avg (ช่วงเร่ง) [kA]", "I heat avg (ร้อนรวม) [kA]",
+        "I hold avg [kA]", "I ramp avg [kA]", "I heat avg [kA]",
         "I setpoint [kA]"
     ]
     ws.row_dimensions[row_cursor].height = 24
@@ -596,7 +602,7 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
                 t2['i_set']
             ]
         elif c_data:
-            row_vals = [f"Cycle {c_num}", "-", "ยังไม่ถึง 95 °C", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            row_vals = [f"Cycle {c_num}", "-", "Below 95°C", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
         else:
             row_vals = [f"Cycle {c_num}", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
 
@@ -607,15 +613,15 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
             cell.alignment = center_align
         row_cursor += 1
 
-    # 5. ตารางที่ 3: สรุปอุณหภูมิหลังสิ้นสุดการระบายความร้อน T4
+    # 5. Table 3: Cooling Phase Verification at T4
     row_cursor += 2
-    ws.cell(row=row_cursor, column=1, value="3. อุณหภูมิสายและห้อง ณ สิ้นสุดการระบายความร้อน T4 (ก่อนเริ่มรอบถัดไป)").font = font_subtitle
+    ws.cell(row=row_cursor, column=1, value="3. Cooling Phase Verification at T4 (End of Cooling)").font = font_subtitle
     row_cursor += 1
 
     headers_t4 = [
-        "รอบที่ (Cycle)", "แถว No.", "เวลา T4",
-        "ตัวนำเฉลี่ย [°C]", "เปลือกนอก [°C]", "อุณหภูมิห้อง [°C]",
-        "ผลต่าง (ตัวนำ - ห้อง) [°C]", "สถานะการระบายความร้อน"
+        "Cycle", "Row No.", "T4 Time",
+        "Final T avg [°C]", "Final Sheath Test [°C]", "Final T amb [°C]",
+        "Delta T [K]", "Cooling Status"
     ]
     ws.row_dimensions[row_cursor].height = 24
     for c_idx, h in enumerate(headers_t4, start=1):
@@ -629,14 +635,14 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         c_data = next((c for c in cycles if c['cycle_num'] == c_num), None)
         if c_data and c_data['t4']:
             t4 = c_data['t4']
-            cool_status = "ระบายความร้อนสมบูรณ์" if c_data['compliance']['cool_pass'] else "ระบายความร้อน 15h 59m"
+            cool_status = "Cooling Complete (Pass)" if c_data['compliance']['cool_pass'] else "In Progress"
             row_vals = [
                 f"Cycle {c_num}", t4['no'], t4['date'].strftime("%Y-%m-%d %H:%M:%S"),
                 t4['final_t_avg'], t4['final_sheath_test'], t4['final_t_amb'],
                 t4['delta_t'], cool_status
             ]
         elif c_data:
-            row_vals = [f"Cycle {c_num}", "-", "ยังไม่สิ้นสุดช่วงระบาย", "-", "-", "-", "-", "-"]
+            row_vals = [f"Cycle {c_num}", "-", "Cooling in Progress", "-", "-", "-", "-", "-"]
         else:
             row_vals = [f"Cycle {c_num}", "-", "-", "-", "-", "-", "-", "-"]
 
@@ -659,19 +665,17 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
 
 def launch_gui(default_file="HCHV 115 kV.xlsx"):
     """
-    หน้าต่างโปรแกรมแบบกราฟิก (GUI) ฟอนต์ TH Sarabun
-    ออกแบบให้ใช้งานง่าย เรียบง่าย และสะดวกต่อการใช้งาน
-    สำหรับผู้บริหารหรือวิศวกรผู้ทดสอบ
+    Clean, concise English Desktop GUI for Heating Cycle Report Analysis.
     """
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
     import tkinter.font as tkfont
 
     root = tk.Tk()
-    root.title("ระบบสรุปผลการทดสอบ Heating Cycle Test (IEC 60840 / IEC 60502-2)")
+    root.title("Heating Cycle Test Analyzer (IEC 60840 / IEC 60502-2)")
     root.configure(bg="#F8FAFC")
 
-    # กำหนดขนาดและจัดตำแหน่งกึ่งกลางหน้าจอ
+    # Center window on screen
     w, h = 880, 720
     ws = root.winfo_screenwidth()
     hs = root.winfo_screenheight()
@@ -680,27 +684,25 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     root.geometry(f"{w}x{h}+{x}+{y}")
     root.minsize(780, 620)
 
-    # ค้นหาฟอนต์ TH Sarabun
+    # Font setup
     available_fonts = [f.lower() for f in tkfont.families()]
-    if "th sarabun new" in available_fonts:
+    if "segoe ui" in available_fonts:
+        f_name = "Segoe UI"
+    elif "th sarabun new" in available_fonts:
         f_name = "TH Sarabun New"
-    elif "th sarabunpsk" in available_fonts:
-        f_name = "TH SarabunPSK"
-    elif "th sarabun" in available_fonts:
-        f_name = "TH Sarabun"
     else:
-        f_name = "Tahoma"
+        f_name = "Arial"
 
-    f_title = (f_name, 20, "bold")
-    f_sub = (f_name, 14, "normal")
-    f_group = (f_name, 16, "bold")
-    f_body = (f_name, 15, "normal")
-    f_bold = (f_name, 15, "bold")
-    f_btn = (f_name, 16, "bold")
-    f_status = (f_name, 14, "italic")
-    f_txt = (f_name, 15, "normal")
+    f_title = (f_name, 15, "bold")
+    f_sub = (f_name, 10, "normal")
+    f_group = (f_name, 11, "bold")
+    f_body = (f_name, 10, "normal")
+    f_bold = (f_name, 10, "bold")
+    f_btn = (f_name, 11, "bold")
+    f_status = (f_name, 10, "italic")
+    f_txt = ("Consolas" if "consolas" in available_fonts else "Courier New", 10, "normal")
 
-    # ตั้งค่าสไตล์ ttk
+    # TTK Style
     style = ttk.Style()
     style.theme_use('clam')
     style.configure('.', font=f_body, background="#F8FAFC")
@@ -710,35 +712,34 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     style.configure('TEntry', font=f_body)
 
     # 1. Header Banner
-    header_frame = tk.Frame(root, bg="#1E3A8A", height=75)
+    header_frame = tk.Frame(root, bg="#1E3A8A", height=70)
     header_frame.pack(fill="x")
     
     title_lbl = tk.Label(
         header_frame, 
-        text="โปรแกรมตรวจจับและสรุปเวลาการทดสอบ Heating Cycle Test", 
+        text="Heating Cycle Test Analyzer", 
         font=f_title, 
         bg="#1E3A8A", 
         fg="white"
     )
-    title_lbl.pack(pady=(8, 2))
+    title_lbl.pack(pady=(10, 2))
     
     sub_lbl = tk.Label(
         header_frame, 
-        text="ค้นหาจุดเวลา T1, T2, T3, T4 และสรุปเวลาแต่ละ Cycle จากไฟล์ผลทดสอบจริง (IEC 60840 / 60502-2)", 
+        text="Automatic Milestone & Duration Detection (IEC 60840 / IEC 60502-2)", 
         font=f_sub, 
         bg="#1E3A8A", 
         fg="#BFDBFE"
     )
-    sub_lbl.pack(pady=(0, 8))
+    sub_lbl.pack(pady=(0, 10))
 
     content_frame = tk.Frame(root, padx=18, pady=10, bg="#F8FAFC")
     content_frame.pack(fill="both", expand=True)
 
     # 2. Section 1: File Selection
-    file_group = ttk.LabelFrame(content_frame, text=" 1. เลือกไฟล์รายงานการทดสอบ (Excel Report) ", padding=12)
+    file_group = ttk.LabelFrame(content_frame, text=" 1. Select Excel Test Report ", padding=12)
     file_group.pack(fill="x", pady=5)
 
-    # ตรวจสอบไฟล์เริ่มต้น
     init_path = ""
     if os.path.exists(default_file):
         init_path = os.path.abspath(default_file)
@@ -752,7 +753,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
 
     def browse_file():
         fn = filedialog.askopenfilename(
-            title="เลือกไฟล์รายงานการทดสอบ Excel",
+            title="Select Test Report (Excel)",
             filetypes=[("Excel Files", "*.xlsx *.xls")]
         )
         if fn:
@@ -760,7 +761,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
 
     browse_btn = tk.Button(
         file_group, 
-        text="เลือกไฟล์...", 
+        text="Browse...", 
         font=f_bold, 
         bg="#E2E8F0", 
         fg="#0F172A", 
@@ -773,13 +774,13 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     browse_btn.pack(side="right")
 
     # 3. Section 2: Standard Selection
-    std_group = ttk.LabelFrame(content_frame, text=" 2. มาตรฐานการทดสอบ (Standard) ", padding=10)
+    std_group = ttk.LabelFrame(content_frame, text=" 2. Test Standard ", padding=10)
     std_group.pack(fill="x", pady=5)
 
     std_var = tk.StringVar(value="auto")
-    r1 = ttk.Radiobutton(std_group, text="ตรวจจับอัตโนมัติ (Auto-detect จากค่าแรงดัน U test ในไฟล์)", variable=std_var, value="auto")
-    r2 = ttk.Radiobutton(std_group, text="สายไฟฟ้าแรงสูง HV (IEC 60840 / 62067: รอบละ 24 ชม. - ร้อน 8 ชม. / ระบาย 16 ชม.)", variable=std_var, value="hv")
-    r3 = ttk.Radiobutton(std_group, text="สายไฟฟ้าแรงดันปานกลาง MV (IEC 60502-2: ร้อน 8 ชม. / ระบายความร้อนตามธรรมชาติ)", variable=std_var, value="mv")
+    r1 = ttk.Radiobutton(std_group, text="Auto-detect (based on recorded test voltage U_test)", variable=std_var, value="auto")
+    r2 = ttk.Radiobutton(std_group, text="HV Cable (IEC 60840 / 62067: 24h Cycle - Heat >= 8h / Cool >= 16h)", variable=std_var, value="hv")
+    r3 = ttk.Radiobutton(std_group, text="MV Cable (IEC 60502-2: Heat >= 8h / Natural Cooling)", variable=std_var, value="mv")
     r1.pack(anchor="w", pady=2)
     r2.pack(anchor="w", pady=2)
     r3.pack(anchor="w", pady=2)
@@ -788,26 +789,26 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     action_frame = tk.Frame(content_frame, bg="#F8FAFC")
     action_frame.pack(fill="x", pady=8)
 
-    status_var = tk.StringVar(value="พร้อมประมวลผล กรุณากดปุ่ม '[ เริ่มประมวลผล ]' ด้านล่าง")
+    status_var = tk.StringVar(value="Ready. Select an Excel report and click 'Run Analysis'.")
 
     def process_data():
         fp = file_var.get().strip().strip('"').strip("'")
         if not fp or not os.path.exists(fp):
-            messagebox.showerror("ข้อผิดพลาด", f"ไม่พบไฟล์: {fp}\nกรุณาเลือกไฟล์ Excel ที่ต้องการวิเคราะห์")
+            messagebox.showerror("Error", f"File not found:\n{fp}\nPlease select a valid Excel file.")
             return
 
         try:
-            status_var.set("กำลังอ่านไฟล์และคำนวณข้อมูลรอบการทดสอบ...")
+            status_var.set("Reading file and analyzing cycle milestones...")
             root.update_idletasks()
 
             records = load_test_records(fp)
             std_cfg = detect_standard(records, std_var.get())
             cycles = analyze_cycles(records, std_cfg)
             
-            # เพิ่ม Sheet ใน Excel
+            # Add Sheet into Excel
             add_cycle_summary_sheet(fp, cycles, records, std_cfg, backup=True)
 
-            # แสดงผลลัพธ์ใน Text Area
+            # Display Concise English Summary
             result_txt.delete("1.0", "end")
 
             first_dt = records[0]['date']
@@ -818,57 +819,58 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
             elapsed_rem_mins = int(total_elapsed_mins % 60)
 
             result_txt.insert("end", "=" * 70 + "\n")
-            result_txt.insert("end", " สรุปผลการวิเคราะห์ Heating Cycle Test Report\n")
+            result_txt.insert("end", " Heating Cycle Test Summary Report\n")
             result_txt.insert("end", "=" * 70 + "\n\n")
-            result_txt.insert("end", f"• ไฟล์ข้อมูล: {os.path.basename(fp)}\n")
-            result_txt.insert("end", f"• มาตรฐานที่ใช้: {std_cfg['standard_name']}\n")
-            result_txt.insert("end", f"• เริ่มการทดสอบเมื่อ: {first_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            result_txt.insert("end", f"• ข้อมูลบันทึกล่าสุด: {last_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            result_txt.insert("end", f"• ระยะเวลาทดสอบสะสม: {total_elapsed_mins/60.0:.1f} ชม. ({elapsed_days} วัน {elapsed_rem_hrs} ชม. {elapsed_rem_mins} นาที)\n")
-            result_txt.insert("end", f"• ตรวจพบข้อมูลรอบ: ทั้งหมด {len(cycles)} รอบ (เสร็จสมบูรณ์ {len([c for c in cycles if c['status']=='Completed'])} รอบ)\n\n")
-            result_txt.insert("end", f"เพิ่มหน้าชีต 'Cycle_Summary' เป็นหน้าแรกของไฟล์ Excel เรียบร้อยแล้ว (รายงานครบ 20 รอบ)\n\n")
+            result_txt.insert("end", f"• File: {os.path.basename(fp)}\n")
+            result_txt.insert("end", f"• Standard: {std_cfg['standard_name']}\n")
+            result_txt.insert("end", f"• Start Time: {first_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            result_txt.insert("end", f"• Latest Record: {last_dt.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            result_txt.insert("end", f"• Total Elapsed: {total_elapsed_mins/60.0:.1f} hrs ({elapsed_days}d {elapsed_rem_hrs}h {elapsed_rem_mins}m)\n")
+            result_txt.insert("end", f"• Cycles Detected: {len(cycles)} cycles ({len([c for c in cycles if c['status']=='Completed'])} Completed)\n\n")
+            result_txt.insert("end", "Sheet 'Cycle_Summary' successfully added to the Excel file.\n\n")
 
             for c in cycles:
                 c_num = c['cycle_num']
-                st = "เสร็จสมบูรณ์" if c['status'] == 'Completed' else "กำลังทดสอบ"
+                st = c['status']
                 result_txt.insert("end", "-" * 70 + "\n")
                 result_txt.insert("end", f"[ Cycle {c_num} : {st} ]\n")
                 result_txt.insert("end", "-" * 70 + "\n")
                 if c['t1']:
-                    result_txt.insert("end", f"  T1 (เริ่มจ่ายกระแส) : แถวที่ {c['t1']['no']} | เวลา {c['t1']['date'].strftime('%Y-%m-%d %H:%M:%S')} (I = {c['t1']['i_test']:.3f} kA)\n")
+                    result_txt.insert("end", f"  T1 (Heat Start) : Row {c['t1']['no']} | {c['t1']['date'].strftime('%Y-%m-%d %H:%M:%S')} (I = {c['t1']['i_test']:.3f} kA)\n")
                 if c['t2']:
                     t2 = c['t2']
                     ramp = format_duration(c['durations']['ramp_mins'])
-                    result_txt.insert("end", f"  T2 (ตัวนำแตะ 95 °C): แถวที่ {t2['no']} | เวลา {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (ช่วงเร่ง: {ramp})\n")
+                    result_txt.insert("end", f"  T2 (95°C Target): Row {t2['no']} | {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (Ramp: {ramp})\n")
                     i_hold_s = f"{c['currents']['i_hold_avg']:.3f} kA" if c['currents'].get('i_hold_avg') is not None else "-"
                     i_ramp_s = f"{c['currents']['i_ramp_avg']:.3f} kA" if c['currents'].get('i_ramp_avg') is not None else "-"
                     i_heat_s = f"{c['currents']['i_heat_avg']:.3f} kA" if c['currents'].get('i_heat_avg') is not None else "-"
-                    result_txt.insert("end", f"     อุณหภูมิ ณ T2   : T1={t2['t1']:.1f}°C, T2={t2['t2']:.1f}°C, T3={t2['t3']:.1f}°C, Tavg={t2['t_avg']:.1f}°C\n")
-                    result_txt.insert("end", f"                       Sheath Ref={t2['tc_sheath_ref']:.1f}°C, Sheath Test={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, U test={t2['u_test']:.1f} kV\n")
-                    result_txt.insert("end", f"     กระแสเฉลี่ยจริง : ช่วงคงที่={i_hold_s} | ช่วงเร่ง={i_ramp_s} | ตลอดช่วงร้อนรวม={i_heat_s}\n")
+                    result_txt.insert("end", f"     T2 Readings  : Tavg={t2['t_avg']:.1f}°C, Sheath={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, Utest={t2['u_test']:.1f} kV\n")
+                    result_txt.insert("end", f"     Avg Current  : Hold={i_hold_s} | Ramp={i_ramp_s} | Total Heat={i_heat_s}\n")
                 if c['t3']:
                     hold = format_duration(c['durations']['hold_mins'])
                     heat = format_duration(c['durations']['total_heat_mins'])
-                    h_pass = "ผ่าน" if c['compliance']['hold_pass'] else "ไม่ผ่าน"
-                    result_txt.insert("end", f"  T3 (หยุดจ่ายกระแส) : แถวที่ {c['t3']['no']} | เวลา {c['t3']['date'].strftime('%Y-%m-%d %H:%M:%S')} (กระแสเหลือ: {c['t3']['noise_current']:.3f} kA)\n")
-                    result_txt.insert("end", f"     ช่วงอุณหภูมิคงที่: {hold} [เกณฑ์ >={std_cfg['hold_target_mins']//60}h : {h_pass}]\n")
-                    result_txt.insert("end", f"     เวลาร้อนรวม      : {heat} [เกณฑ์ >={std_cfg['heat_target_mins']//60}h]\n")
+                    h_pass = "Pass" if c['compliance']['hold_pass'] else "Fail"
+                    heat_pass = "Pass" if c['compliance']['heat_pass'] else "Fail"
+                    result_txt.insert("end", f"  T3 (Heat Stop)  : Row {c['t3']['no']} | {c['t3']['date'].strftime('%Y-%m-%d %H:%M:%S')} (Noise: {c['t3']['noise_current']:.3f} kA)\n")
+                    result_txt.insert("end", f"     Hold Time    : {hold} [Target >= {std_cfg['hold_target_mins']//60}h: {h_pass}]\n")
+                    result_txt.insert("end", f"     Heat Time    : {heat} [Target >= {std_cfg['heat_target_mins']//60}h: {heat_pass}]\n")
                 if c['t4']:
                     cool = format_duration(c['durations']['cooling_mins'])
                     tot = format_duration(c['durations']['total_cycle_mins'])
-                    result_txt.insert("end", f"  T4 (สิ้นสุดระบาย)  : แถวที่ {c['t4']['no']} | เวลา {c['t4']['date'].strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    result_txt.insert("end", f"     เวลาระบาย        : {cool}\n")
-                    result_txt.insert("end", f"     เวลารวม 1 Cycle  : {tot}\n\n")
+                    c_pass = "Pass" if c['compliance']['cool_pass'] else "Fail"
+                    result_txt.insert("end", f"  T4 (Cool End)   : Row {c['t4']['no']} | {c['t4']['date'].strftime('%Y-%m-%d %H:%M:%S')} (Tavg = {c['t4']['final_t_avg']:.1f}°C)\n")
+                    result_txt.insert("end", f"     Cooling Time : {cool} [Target >= {std_cfg['cool_target_mins']//60}h: {c_pass}]\n")
+                    result_txt.insert("end", f"     Total Cycle  : {tot}\n\n")
 
-            status_var.set("ประมวลผลสำเร็จและเพิ่มชีต Cycle_Summary ในไฟล์ Excel เรียบร้อยแล้ว")
+            status_var.set("Analysis complete. Sheet 'Cycle_Summary' created successfully.")
             messagebox.showinfo(
-                "สำเร็จ", 
-                f"วิเคราะห์ข้อมูลสำเร็จ!\n\nเพิ่มชีต 'Cycle_Summary' ลงในไฟล์:\n{os.path.basename(fp)}\nเรียบร้อยแล้วครับ"
+                "Success", 
+                f"Analysis completed successfully!\n\nAdded 'Cycle_Summary' sheet to:\n{os.path.basename(fp)}"
             )
 
         except Exception as e:
-            status_var.set("เกิดข้อผิดพลาดในการประมวลผล")
-            messagebox.showerror("ข้อผิดพลาด", f"เกิดข้อผิดพลาดในการประมวลผล:\n{str(e)}")
+            status_var.set("Error during analysis.")
+            messagebox.showerror("Error", f"An error occurred:\n{str(e)}")
 
     def open_excel():
         fp = file_var.get().strip().strip('"').strip("'")
@@ -876,13 +878,13 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
             try:
                 os.startfile(fp)
             except Exception as e:
-                messagebox.showerror("เปิดไฟล์ไม่สำเร็จ", str(e))
+                messagebox.showerror("Error", str(e))
         else:
-            messagebox.showwarning("แจ้งเตือน", "ไม่พบไฟล์ Excel กรุณาเลือกไฟล์ก่อน")
+            messagebox.showwarning("Warning", "Excel file not found. Please select a valid file first.")
 
     run_btn = tk.Button(
         action_frame, 
-        text="[ เริ่มตรวจหาจุดเวลา และสร้าง Sheet สรุปใน Excel ]", 
+        text="[ Run Analysis & Add Summary Sheet ]", 
         font=f_btn, 
         bg="#1E3A8A", 
         fg="white", 
@@ -898,7 +900,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
 
     open_btn = tk.Button(
         action_frame, 
-        text="เปิดดูไฟล์ Excel", 
+        text="Open Excel File", 
         font=f_bold, 
         bg="#F1F5F9", 
         fg="#0F172A", 
@@ -914,7 +916,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     status_lbl.pack(fill="x", pady=(4, 6))
 
     # 5. Section 4: Result Output View
-    out_group = ttk.LabelFrame(content_frame, text=" 3. รายงานสรุปผลการวิเคราะห์ ", padding=8)
+    out_group = ttk.LabelFrame(content_frame, text=" 3. Analysis Summary ", padding=8)
     out_group.pack(fill="both", expand=True, pady=4)
 
     result_txt = tk.Text(out_group, font=f_txt, wrap="word", bg="white", relief="solid", bd=1, padx=10, pady=8)
@@ -923,7 +925,7 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
     scrollbar.pack(side="right", fill="y")
     result_txt.pack(side="left", fill="both", expand=True)
 
-    result_txt.insert("end", "กดปุ่ม '[ เริ่มประมวลผล และแทรก Sheet สรุปใน Excel ]' เพื่อเริ่มการวิเคราะห์...\n")
+    result_txt.insert("end", "Click '[ Run Analysis & Add Summary Sheet ]' to begin analysis...\n")
 
     root.mainloop()
 

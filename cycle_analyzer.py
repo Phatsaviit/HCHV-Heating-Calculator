@@ -315,6 +315,26 @@ def analyze_cycles(records, standard_config):
             'i_test': r_t1['i_test']
         }
 
+        # คำนวณกระแสเฉลี่ยตามช่วงเวลาจริง (Average Currents)
+        # 1. ช่วงเร่งความร้อน (T1 -> T2)
+        i_ramp_slice = [records[k]['i_test'] for k in range(t1_idx, t2_idx + 1)] if t2_idx is not None else []
+        i_ramp_avg = round(sum(i_ramp_slice) / len(i_ramp_slice), 3) if i_ramp_slice else None
+
+        # 2. ช่วงอุณหภูมิคงที่ (T2 -> T3)
+        i_hold_slice = [records[k]['i_test'] for k in range(t2_idx, t3_idx)] if (t2_idx is not None and t3_idx is not None) else []
+        i_hold_avg = round(sum(i_hold_slice) / len(i_hold_slice), 3) if i_hold_slice else None
+
+        # 3. ตลอดช่วงให้ความร้อนรวม (T1 -> T3 หรือถึงแถวล่าสุด)
+        heat_end = t3_idx if t3_idx is not None else total_records
+        i_heat_slice = [records[k]['i_test'] for k in range(t1_idx, heat_end)]
+        i_heat_avg = round(sum(i_heat_slice) / len(i_heat_slice), 3) if i_heat_slice else None
+
+        c_info['currents'] = {
+            'i_ramp_avg': i_ramp_avg,
+            'i_hold_avg': i_hold_avg,
+            'i_heat_avg': i_heat_avg
+        }
+
         # ข้อมูล T2
         if t2_idx is not None:
             r_t2 = records[t2_idx]
@@ -334,6 +354,9 @@ def analyze_cycles(records, standard_config):
                 'u_test': r_t2['u_test'],
                 'i_set': r_t2['i_set'],
                 'i_test': r_t2['i_test'],
+                'i_ramp_avg': i_ramp_avg,
+                'i_hold_avg': i_hold_avg,
+                'i_heat_avg': i_heat_avg
             }
 
         # ข้อมูล T3
@@ -483,7 +506,8 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         "ช่วงเร่ง (T1->T2)", "ช่วงคงที่ (T2->T3)", f"เกณฑ์คงที่ (>={standard_config['hold_target_mins']//60}h)",
         "เวลาร้อนรวม (T1->T3)", f"เกณฑ์ร้อนรวม (>={standard_config['heat_target_mins']//60}h)",
         "เวลาระบาย (T3->T4)", f"เกณฑ์ระบาย (>={standard_config['cool_target_mins']//60}h)",
-        "เวลารวม 1 Cycle"
+        "เวลารวม 1 Cycle",
+        "I hold avg (ช่วงคงที่) [kA]", "I heat avg (ช่วงร้อนรวม) [kA]"
     ]
     
     ws.row_dimensions[8].height = 24
@@ -508,6 +532,9 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
             heat_pass = "ผ่าน" if c_data['compliance']['heat_pass'] else ("-" if c_data['t3'] is None else "ไม่ผ่าน")
             cool_pass = "ผ่าน" if c_data['compliance']['cool_pass'] else ("-" if c_data['t4'] is None else "ไม่ผ่าน")
 
+            i_hold_s = f"{c_data['currents']['i_hold_avg']:.3f}" if c_data['currents'].get('i_hold_avg') is not None else "-"
+            i_heat_s = f"{c_data['currents']['i_heat_avg']:.3f}" if c_data['currents'].get('i_heat_avg') is not None else "-"
+
             row_vals = [
                 f"Cycle {c_num}", status_str,
                 t1_s, t2_s, t3_s, t4_s,
@@ -515,10 +542,11 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
                 format_duration(c_data['durations']['hold_mins']), hold_pass,
                 format_duration(c_data['durations']['total_heat_mins']), heat_pass,
                 format_duration(c_data['durations']['cooling_mins']), cool_pass,
-                format_duration(c_data['durations']['total_cycle_mins'])
+                format_duration(c_data['durations']['total_cycle_mins']),
+                i_hold_s, i_heat_s
             ]
         else:
-            row_vals = [f"Cycle {c_num}", "รอการทดสอบ", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            row_vals = [f"Cycle {c_num}", "รอการทดสอบ", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
 
         for col_idx, val in enumerate(row_vals, start=1):
             cell = ws.cell(row=row_cursor, column=col_idx, value=val)
@@ -539,7 +567,9 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         "รอบที่ (Cycle)", "แถว No.", "เวลา T2",
         "T 1 [°C]", "T 2 [°C]", "T 3 [°C]", "T avg [°C]",
         "TC sheath ref [°c]", "TC sheath test [°c]",
-        "T amb [°C]", "U test [kV]", "I heat test [kA]", "I setpoint [kA]"
+        "T amb [°C]", "U test [kV]",
+        "I hold avg (ช่วงคงที่) [kA]", "I ramp avg (ช่วงเร่ง) [kA]", "I heat avg (ร้อนรวม) [kA]",
+        "I setpoint [kA]"
     ]
     ws.row_dimensions[row_cursor].height = 24
     for c_idx, h in enumerate(headers_t2, start=1):
@@ -553,16 +583,22 @@ def add_cycle_summary_sheet(filepath, cycles, records, standard_config, backup=T
         c_data = next((c for c in cycles if c['cycle_num'] == c_num), None)
         if c_data and c_data['t2']:
             t2 = c_data['t2']
+            i_hold_val = f"{t2['i_hold_avg']:.3f}" if t2.get('i_hold_avg') is not None else "-"
+            i_ramp_val = f"{t2['i_ramp_avg']:.3f}" if t2.get('i_ramp_avg') is not None else "-"
+            i_heat_val = f"{t2['i_heat_avg']:.3f}" if t2.get('i_heat_avg') is not None else "-"
+
             row_vals = [
                 f"Cycle {c_num}", t2['no'], t2['date'].strftime("%Y-%m-%d %H:%M:%S"),
                 t2['t1'], t2['t2'], t2['t3'], t2['t_avg'],
                 t2['tc_sheath_ref'], t2['tc_sheath_test'],
-                t2['t_amb'], t2['u_test'], t2['i_test'], t2['i_set']
+                t2['t_amb'], t2['u_test'],
+                i_hold_val, i_ramp_val, i_heat_val,
+                t2['i_set']
             ]
         elif c_data:
-            row_vals = [f"Cycle {c_num}", "-", "ยังไม่ถึง 95 °C", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            row_vals = [f"Cycle {c_num}", "-", "ยังไม่ถึง 95 °C", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
         else:
-            row_vals = [f"Cycle {c_num}", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
+            row_vals = [f"Cycle {c_num}", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]
 
         for col_idx, val in enumerate(row_vals, start=1):
             cell = ws.cell(row=row_cursor, column=col_idx, value=val)
@@ -748,9 +784,12 @@ def launch_gui(default_file="HCHV 115 kV.xlsx"):
                     t2 = c['t2']
                     ramp = format_duration(c['durations']['ramp_mins'])
                     result_txt.insert("end", f"  T2 (ถึง 95 °C)  : แถวที่ {t2['no']} | เวลา {t2['date'].strftime('%Y-%m-%d %H:%M:%S')} (ช่วงเร่ง: {ramp})\n")
+                    i_hold_s = f"{c['currents']['i_hold_avg']:.3f} kA" if c['currents'].get('i_hold_avg') is not None else "-"
+                    i_ramp_s = f"{c['currents']['i_ramp_avg']:.3f} kA" if c['currents'].get('i_ramp_avg') is not None else "-"
+                    i_heat_s = f"{c['currents']['i_heat_avg']:.3f} kA" if c['currents'].get('i_heat_avg') is not None else "-"
                     result_txt.insert("end", f"     ค่า ณ T2     : T1={t2['t1']:.1f}°C, T2={t2['t2']:.1f}°C, T3={t2['t3']:.1f}°C, Tavg={t2['t_avg']:.1f}°C\n")
-                    result_txt.insert("end", f"                   Sheath Ref={t2['tc_sheath_ref']:.1f}°C, Sheath Test={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C\n")
-                    result_txt.insert("end", f"                   U test={t2['u_test']:.1f} kV, I heat={t2['i_test']:.3f} kA\n")
+                    result_txt.insert("end", f"                   Sheath Ref={t2['tc_sheath_ref']:.1f}°C, Sheath Test={t2['tc_sheath_test']:.1f}°C, Tamb={t2['t_amb']:.1f}°C, U test={t2['u_test']:.1f} kV\n")
+                    result_txt.insert("end", f"     กระแสเฉลี่ย  : ช่วงคงที่={i_hold_s} | ช่วงเร่ง={i_ramp_s} | ช่วงร้อนรวม={i_heat_s}\n")
                 if c['t3']:
                     hold = format_duration(c['durations']['hold_mins'])
                     heat = format_duration(c['durations']['total_heat_mins'])
